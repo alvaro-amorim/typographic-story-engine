@@ -4,14 +4,14 @@ Motor experimental para reconstruir objetos com glyphs semanticamente restritos.
 
 ## Estado atual
 
-O MVP recebe uma máscara raster, calcula a distância de cada pixel até a borda, distribui glyphs de forma determinística e gera:
+O MVP recebe uma máscara raster, calcula a distância exata de cada pixel até a borda, distribui glyphs de forma determinística e gera:
 
 - SVG estrito composto por elementos `<text>`;
 - JSON com os glyphs;
 - relatório de validação semântica;
 - prévia em PNG.
 
-O cálculo de distância é implementado no próprio projeto com NumPy. O núcleo não depende de SciPy, Cairo ou outras bibliotecas científicas nativas difíceis de instalar no Windows.
+O mapa de distância usa `scipy.ndimage.distance_transform_edt`, preservando medidas euclidianas precisas para controlar tamanho e opacidade perto das bordas e do centro.
 
 ## Instalação no Windows
 
@@ -33,16 +33,14 @@ python -c "import sys; print(sys.executable)"
 O caminho exibido deve terminar em:
 
 ```text
- typographic-story-engine\venv\Scripts\python.exe
+typographic-story-engine\venv\Scripts\python.exe
 ```
 
-Também é possível executar explicitamente pelo ambiente virtual sem ativá-lo:
-
-```powershell
-.\venv\Scripts\python.exe -m pytest -q
-```
+O nome `(venv)` no início da linha do PowerShell também indica que o ambiente está ativo.
 
 ## Atualizar a branch de desenvolvimento
+
+Com o `venv` ativo:
 
 ```powershell
 git fetch origin
@@ -50,6 +48,8 @@ git switch agent/deterministic-core
 git pull origin agent/deterministic-core
 python -m pip install -r requirements-dev.txt
 ```
+
+Não é necessário apagar ou recriar o ambiente virtual quando ele já está funcionando.
 
 ## Gerar uma cena
 
@@ -83,16 +83,7 @@ Exemplo de paleta:
 python -m pytest -q
 ```
 
-Os testes verificam determinismo, preservação da frequência de letras repetidas, isolamento do estado aleatório global, limites visuais, análise de máscaras sem SciPy e validação dos modelos.
-
-## Solução para instalações anteriores
-
-Versões anteriores do projeto usavam SciPy. Depois de atualizar a branch, ele não é mais necessário. Você pode mantê-lo instalado porque o projeto não fará o import, ou removê-lo do ambiente virtual:
-
-```powershell
-python -m pip uninstall scipy -y
-python -m pip install -r requirements-dev.txt
-```
+Os testes verificam determinismo, preservação da frequência de letras repetidas, isolamento do estado aleatório global, limites visuais, leitura das máscaras e validação dos modelos.
 
 ## Próximo marco
 
