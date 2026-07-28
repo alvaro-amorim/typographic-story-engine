@@ -67,14 +67,21 @@ class DistributionConfig:
 
 @dataclass(frozen=True)
 class OrientationConfig:
-    """Controls how strongly glyphs follow the local tangent field."""
+    """Controls adaptive alignment with the local tangent field.
+
+    Zone strengths set the maximum structural influence. Confidence and depth
+    then attenuate that influence so unstable medial-axis regions naturally
+    return to the fallback rotation instead of producing visible radial bands.
+    """
 
     enabled: bool = True
-    edge_strength: float = 0.92
-    mid_strength: float = 0.72
-    core_strength: float = 0.38
-    jitter_degrees: float = 6.0
-    min_confidence: float = 0.05
+    adaptive: bool = True
+    edge_strength: float = 0.90
+    mid_strength: float = 0.48
+    core_strength: float = 0.12
+    jitter_degrees: float = 7.0
+    min_confidence: float = 0.14
+    confidence_power: float = 1.60
 
     def __post_init__(self) -> None:
         strengths = self.zone_strengths
@@ -82,8 +89,10 @@ class OrientationConfig:
             raise ValueError("orientation strengths must be between zero and one")
         if self.jitter_degrees < 0.0:
             raise ValueError("jitter_degrees cannot be negative")
-        if not 0.0 <= self.min_confidence <= 1.0:
-            raise ValueError("min_confidence must be between zero and one")
+        if not 0.0 <= self.min_confidence < 1.0:
+            raise ValueError("min_confidence must be between zero inclusive and one exclusive")
+        if self.confidence_power <= 0.0:
+            raise ValueError("confidence_power must be greater than zero")
 
     @property
     def zone_strengths(self) -> dict[ZoneName, float]:
@@ -91,6 +100,33 @@ class OrientationConfig:
             "edge": self.edge_strength,
             "mid": self.mid_strength,
             "core": self.core_strength,
+        }
+
+    @property
+    def zone_jitters(self) -> dict[ZoneName, float]:
+        """Use restrained edge jitter and progressively freer interior motion."""
+        return {
+            "edge": self.jitter_degrees * 0.60,
+            "mid": self.jitter_degrees,
+            "core": self.jitter_degrees * 1.65,
+        }
+
+    @property
+    def zone_min_confidences(self) -> dict[ZoneName, float]:
+        """Demand increasingly reliable tangents toward the medial axis."""
+        return {
+            "edge": self.min_confidence * 0.50,
+            "mid": self.min_confidence,
+            "core": min(0.95, self.min_confidence * 2.0),
+        }
+
+    @property
+    def zone_depth_falloffs(self) -> dict[ZoneName, float]:
+        """Attenuation applied from the shallow to the deep side of each zone."""
+        return {
+            "edge": 0.12,
+            "mid": 0.48,
+            "core": 0.92,
         }
 
 
@@ -366,45 +402,111 @@ def blend_axis_angles(
     return normalize_axis_angle(blended)
 
 
+def compute_adaptive_orientation_strength(
+    zone: ZoneName,
+    depth: float,
+    confidence: float,
+    distribution_config: DistributionConfig,
+    orientation_config: OrientationConfig,
+) -> float:
+    """Return the effective tangent influence for one glyph.
+
+    Confidence is remapped from the zone-specific threshold to 0..1 and then
+    sharpened by ``confidence_power``. A depth falloff suppresses the unstable
+    deep side of each zone, especially the core near the medial axis.
+    """
+    if not orientation_config.enabled:
+        return 0.0
+
+    clamped_confidence = max(0.0, min(1.0, float(confidence)))
+    threshold = orientation_config.zone_min_confidences[zone]
+    if clamped_confidence < threshold:
+        return 0.0
+
+    confidence_range = max(1e-12, 1.0 - threshold)
+    normalized_confidence = (clamped_confidence - threshold) / confidence_range
+    confidence_weight = normalized_confidence ** orientation_config.confidence_power
+
+    if orientation_config.adaptive:
+        progress = max(
+            0.0,
+            min(1.0, _zone_progress(zone, depth, distribution_config)),
+        )
+        depth_weight = 1.0 - (
+            orientation_config.zone_depth_falloffs[zone] * progress
+        )
+    else:
+        depth_weight = 1.0
+
+    return max(
+        0.0,
+        min(
+            1.0,
+            orientation_config.zone_strengths[zone]
+            * confidence_weight
+            * depth_weight,
+        ),
+    )
+
+
 def _rotation_for_glyph(
     zone: ZoneName,
+    depth: float,
     position: tuple[int, int],
     rotation_range: Tuple[float, float],
+    distribution_config: DistributionConfig,
     orientation_field: OrientationField | None,
     orientation_config: OrientationConfig,
     rng: random.Random,
-) -> tuple[float, float | None, float, Literal["random", "tangent"]]:
+) -> tuple[
+    float,
+    float | None,
+    float,
+    float,
+    Literal["random", "tangent"],
+]:
     minimum, maximum = rotation_range
     random_angle = rng.uniform(minimum, maximum)
 
     if not orientation_config.enabled or orientation_field is None:
-        return random_angle, None, 0.0, "random"
+        return random_angle, None, 0.0, 0.0, "random"
 
     sample = orientation_field.get(position)
     if sample is None:
-        return random_angle, None, 0.0, "random"
+        return random_angle, None, 0.0, 0.0, "random"
 
     tangent_angle, raw_confidence = sample
     confidence = max(0.0, min(1.0, float(raw_confidence)))
-    if confidence < orientation_config.min_confidence:
-        return random_angle, float(tangent_angle), confidence, "random"
-
-    structural_strength = (
-        orientation_config.zone_strengths[zone] * confidence
+    structural_strength = compute_adaptive_orientation_strength(
+        zone=zone,
+        depth=depth,
+        confidence=confidence,
+        distribution_config=distribution_config,
+        orientation_config=orientation_config,
     )
+    if structural_strength <= 1e-6:
+        return (
+            random_angle,
+            normalize_axis_angle(tangent_angle),
+            confidence,
+            0.0,
+            "random",
+        )
+
     rotation = blend_axis_angles(
         random_angle,
         tangent_angle,
         structural_strength,
     )
-    rotation += rng.uniform(
-        -orientation_config.jitter_degrees,
-        orientation_config.jitter_degrees,
-    )
+    zone_jitter = orientation_config.zone_jitters[zone]
+    if orientation_config.adaptive:
+        zone_jitter *= 1.0 - (0.35 * structural_strength)
+    rotation += rng.uniform(-zone_jitter, zone_jitter)
     return (
         normalize_axis_angle(rotation),
         normalize_axis_angle(tangent_angle),
         confidence,
+        structural_strength,
         "tangent",
     )
 
@@ -422,7 +524,7 @@ def distribute_glyphs(
     orientation_field: OrientationField | None = None,
     orientation_config: OrientationConfig | None = None,
 ) -> List[Glyph]:
-    """Create deterministic, shape-aware and curvature-aware glyphs."""
+    """Create deterministic, shape-aware and adaptively oriented glyphs."""
     if not valid_coords:
         raise ValueError("valid_coords cannot be empty")
     if not character_sequence:
@@ -486,11 +588,14 @@ def distribute_glyphs(
                 rotation,
                 orientation_angle,
                 orientation_confidence,
+                orientation_strength,
                 orientation_source,
             ) = _rotation_for_glyph(
                 zone=zone,
+                depth=normalized_distance,
                 position=(int(x), int(y)),
                 rotation_range=rotation_range,
+                distribution_config=config,
                 orientation_field=orientation_field,
                 orientation_config=orientation,
                 rng=rng,
@@ -525,6 +630,7 @@ def distribute_glyphs(
                     depth=normalized_distance,
                     orientation_angle=orientation_angle,
                     orientation_confidence=orientation_confidence,
+                    orientation_strength=orientation_strength,
                     orientation_source=orientation_source,
                 )
             )
