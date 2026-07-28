@@ -64,11 +64,13 @@ def test_full_tangent_strength_matches_orientation_field() -> None:
         edge_capacity=1,
     )
     orientation = OrientationConfig(
+        adaptive=False,
         edge_strength=1.0,
         mid_strength=1.0,
         core_strength=1.0,
         jitter_degrees=0.0,
         min_confidence=0.0,
+        confidence_power=1.0,
     )
 
     glyphs = distribute_glyphs(
@@ -91,6 +93,7 @@ def test_full_tangent_strength_matches_orientation_field() -> None:
         glyph.orientation_confidence == pytest.approx(1.0)
         for glyph in glyphs
     )
+    assert all(glyph.orientation_strength == pytest.approx(1.0) for glyph in glyphs)
     assert all(glyph.orientation_source == "tangent" for glyph in glyphs)
 
 
@@ -118,6 +121,7 @@ def test_low_confidence_falls_back_to_random_rotation() -> None:
     assert -5.0 <= glyph.rotation <= 5.0
     assert glyph.orientation_angle == pytest.approx(75.0)
     assert glyph.orientation_confidence == pytest.approx(0.02)
+    assert glyph.orientation_strength == 0.0
     assert glyph.orientation_source == "random"
 
 
