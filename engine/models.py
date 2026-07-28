@@ -78,6 +78,13 @@ class Glyph(BaseModel):
     color: str = "#000000"
     zone: Literal["edge", "mid", "core"] = "mid"
     layer: Literal["outline", "fill", "texture"] = "fill"
+    style_role: Literal[
+        "default",
+        "outline_shadow",
+        "outline_detail",
+        "fill_mass",
+        "texture_accent",
+    ] = "default"
     depth: float = Field(default=0.0, ge=0.0, le=1.0)
     orientation_angle: float | None = None
     orientation_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
