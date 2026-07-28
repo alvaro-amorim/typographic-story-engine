@@ -1,88 +1,150 @@
+from __future__ import annotations
+
 import argparse
 import json
-import os
-from engine.models import SemanticObject
-from engine.image_analysis import get_valid_coordinates
+from pathlib import Path
+from typing import Sequence
+
+from pydantic import ValidationError
+
 from engine.glyph_distribution import distribute_glyphs
-from engine.svg_renderer import render_to_svg
-from engine.semantic_validation import validate_scene
+from engine.image_analysis import get_valid_coordinates
+from engine.models import SemanticObject
 from engine.png_exporter import export_to_png
+from engine.semantic_validation import validate_scene
+from engine.svg_renderer import render_to_svg
 
-def main():
-    # 1. Configuração da Interface de Linha de Comando (CLI)
-    parser = argparse.ArgumentParser(description="Typographic Story Engine - Renderizador CLI")
-    parser.add_argument("--id", type=str, default="obj_01", help="ID único do objeto (ex: cat_01)")
-    parser.add_argument("--word", type=str, required=True, help="Palavra que formará o objeto (ex: CAT)")
-    parser.add_argument("--mask", type=str, required=True, help="Caminho para o arquivo PNG de máscara")
-    parser.add_argument("--count", type=int, default=12000, help="Quantidade de letras a serem distribuídas")
-    
-    args = parser.parse_args()
+DEFAULT_PALETTE = ["#2C303A", "#4F5D75", "#BFC0C0", "#EAE2B7"]
 
-    print(f"Iniciando Typographic Story Engine: Renderizando '{args.word}'...")
-    
-    if not os.path.exists(args.mask):
-        print(f"Erro: O arquivo de máscara '{args.mask}' não foi encontrado.")
-        return
 
-    # 2. Configuração Dinâmica do Objeto
-    # (Para a CLI, estamos usando uma paleta neutra base, mas isso poderá ser parametrizado no futuro)
-    target_object = SemanticObject(
-        id=args.id,
-        word=args.word.upper(),
-        mask_path=args.mask,
-        glyph_count=args.count, 
-        font_size_range=(8, 28),
-        palette=["#2C303A", "#4F5D75", "#BFC0C0", "#EAE2B7"]
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Typographic Story Engine - strict typographic SVG renderer"
     )
-    
-    # 3. Análise e Distribuição
-    print(f"[{target_object.id}] Analisando máscara '{target_object.mask_path}'...")
-    valid_pixels, img_width, img_height = get_valid_coordinates(target_object.mask_path)
+    parser.add_argument("--id", default="obj_01", help="Unique object ID")
+    parser.add_argument("--word", required=True, help="Word used to build the object")
+    parser.add_argument("--mask", type=Path, required=True, help="Path to a PNG mask")
+    parser.add_argument("--count", type=int, default=12000, help="Number of glyphs")
+    parser.add_argument("--font-min", type=float, default=8.0, help="Minimum font size")
+    parser.add_argument("--font-max", type=float, default=28.0, help="Maximum font size")
+    parser.add_argument(
+        "--rotation-min", type=float, default=-12.0, help="Minimum glyph rotation"
+    )
+    parser.add_argument(
+        "--rotation-max", type=float, default=12.0, help="Maximum glyph rotation"
+    )
+    parser.add_argument(
+        "--palette",
+        nargs="+",
+        default=DEFAULT_PALETTE,
+        metavar="HEX",
+        help="One or more six-digit hexadecimal colors",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=817392, help="Seed used for deterministic rendering"
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("outputs"),
+        help="Directory used for generated artifacts",
+    )
+    parser.add_argument(
+        "--skip-png",
+        action="store_true",
+        help="Skip PNG preview generation",
+    )
+    return parser
+
+
+def _write_json(path: Path, payload: object) -> None:
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    if not args.mask.is_file():
+        print(f"Erro: a máscara '{args.mask}' não foi encontrada ou não é um arquivo.")
+        return 2
+
+    try:
+        target_object = SemanticObject(
+            id=args.id,
+            word=args.word,
+            mask_path=str(args.mask),
+            glyph_count=args.count,
+            font_size_range=(args.font_min, args.font_max),
+            palette=args.palette,
+            seed=args.seed,
+        )
+    except ValidationError as error:
+        print("Erro de configuração:")
+        print(error)
+        return 2
+
+    print(
+        f"Iniciando Typographic Story Engine: renderizando "
+        f"'{target_object.word}' com seed {target_object.seed}..."
+    )
+
+    valid_pixels, image_width, image_height = get_valid_coordinates(
+        target_object.mask_path
+    )
+    if not valid_pixels:
+        print("Erro: a máscara não contém pixels escuros válidos para renderização.")
+        return 2
+
     scene_glyphs = distribute_glyphs(
         object_id=target_object.id,
         valid_coords=valid_pixels,
-        allowed_chars=target_object.allowed_characters,
+        character_sequence=target_object.character_sequence,
         glyph_count=target_object.glyph_count,
         font_size_range=target_object.font_size_range,
         palette=target_object.palette,
-        seed=817392
+        seed=target_object.seed,
+        rotation_range=(args.rotation_min, args.rotation_max),
     )
-    
-    # Nomes dinâmicos para os arquivos gerados
-    svg_file = f"{target_object.id}_scene.svg"
-    json_file = f"{target_object.id}_scene.json"
-    report_file = f"{target_object.id}_validation.json"
-    png_file = f"{target_object.id}_preview.png"
 
-    # 4. Renderização SVG
-    print(f"Renderizando vetor ({svg_file})...")
-    svg_output = render_to_svg(scene_glyphs, width=img_width, height=img_height)
-    with open(svg_file, "w", encoding="utf-8") as f:
-        f.write(svg_output)
-        
-    # 5. Dados JSON
-    print(f"Exportando dados ({json_file})...")
-    scene_data = [g.model_dump() for g in scene_glyphs]
-    with open(json_file, "w", encoding="utf-8") as f:
-        json.dump(scene_data, f, indent=2)
-        
-    # 6. Validação Estrita
-    print("Executando o Validador Semântico...")
-    report = validate_scene(scene_glyphs, target_object.allowed_characters, svg_output)
-    with open(report_file, "w", encoding="utf-8") as f:
-        json.dump(report, f, indent=2)
-        
-    if report["is_valid"]:
-        print("  -> Validação APROVADA: Arquitetura 100% tipográfica e semântica.")
-    else:
-        print("  -> Validação REPROVADA: Regras estritas violadas.")
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    base_name = target_object.id
+    svg_path = args.output_dir / f"{base_name}_scene.svg"
+    json_path = args.output_dir / f"{base_name}_scene.json"
+    report_path = args.output_dir / f"{base_name}_validation.json"
+    png_path = args.output_dir / f"{base_name}_preview.png"
 
-    # 7. Exportação PNG (Agora com PyMuPDF garantido)
-    print(f"Rasterizando prévia ({png_file})...")
-    export_to_png(svg_output, png_file)
-    print("  -> Prévia PNG gerada com sucesso.")
-        
-    print(f"\nSUCESSO! O objeto '{args.word}' foi gerado em todos os formatos.")
+    svg_output = render_to_svg(scene_glyphs, width=image_width, height=image_height)
+    svg_path.write_text(svg_output, encoding="utf-8")
+    _write_json(json_path, [glyph.model_dump() for glyph in scene_glyphs])
+
+    report = validate_scene(
+        scene_glyphs,
+        target_object.allowed_characters,
+        svg_output,
+    )
+    report["seed"] = target_object.seed
+    report["word"] = target_object.word
+    report["character_sequence"] = list(target_object.character_sequence)
+    _write_json(report_path, report)
+
+    if not report["is_valid"]:
+        print(f"Validação reprovada. Consulte: {report_path}")
+        return 1
+
+    if not args.skip_png:
+        try:
+            export_to_png(svg_output, str(png_path))
+        except Exception as error:
+            print(f"Aviso: não foi possível gerar a prévia PNG: {error}")
+            return 1
+
+    print("Validação aprovada: SVG estrito e caracteres semânticos corretos.")
+    print(f"Artefatos gerados em: {args.output_dir.resolve()}")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
