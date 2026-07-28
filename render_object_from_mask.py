@@ -22,6 +22,12 @@ from engine.layered_distribution import (
     summarize_layer_metrics,
 )
 from engine.models import SemanticObject
+from engine.organic_styling import (
+    OrganicStyleConfig,
+    STYLE_ROLE_ORDER,
+    distribute_organic_glyphs,
+    summarize_organic_metrics,
+)
 from engine.png_exporter import export_to_png
 from engine.semantic_validation import validate_scene
 from engine.svg_renderer import render_to_svg
@@ -59,50 +65,89 @@ def build_parser() -> argparse.ArgumentParser:
         help="One or more six-digit hexadecimal colors",
     )
     parser.add_argument(
-        "--seed", type=int, default=817392, help="Seed used for deterministic rendering"
+        "--seed",
+        type=int,
+        default=817392,
+        help="Seed used for deterministic rendering",
     )
 
     parser.add_argument(
         "--layer-mode",
-        choices=("layered", "legacy"),
-        default="layered",
-        help="Use independent outline/fill/texture layers or the previous renderer",
+        choices=("organic", "layered", "legacy"),
+        default="organic",
+        help="Use organic roles, basic layers or the previous zone renderer",
     )
     parser.add_argument(
         "--outline-ratio",
         type=float,
-        default=0.35,
-        help="Relative glyph budget assigned to the structural outline",
+        default=0.34,
+        help="Relative glyph budget assigned to the complete outline",
     )
     parser.add_argument(
         "--fill-ratio",
         type=float,
-        default=0.50,
+        default=0.54,
         help="Relative glyph budget assigned to the mass fill",
     )
     parser.add_argument(
         "--texture-ratio",
         type=float,
-        default=0.15,
-        help="Relative glyph budget assigned to the low-opacity texture overlay",
+        default=0.12,
+        help="Relative glyph budget assigned to the texture overlay",
     )
     parser.add_argument(
         "--outline-depth-max",
         type=float,
         default=0.18,
-        help="Maximum normalized depth eligible for the outline layer",
+        help="Maximum normalized depth eligible for outline glyphs",
     )
     parser.add_argument(
         "--fill-depth-min",
         type=float,
         default=0.035,
-        help="Minimum normalized depth eligible for the fill layer",
+        help="Minimum normalized depth eligible for fill glyphs",
     )
     parser.add_argument(
         "--texture-depth-min",
         type=float,
         default=0.20,
-        help="Minimum normalized depth eligible for the texture layer",
+        help="Minimum normalized depth eligible for texture glyphs",
+    )
+    parser.add_argument(
+        "--outline-shadow-fraction",
+        type=float,
+        default=0.32,
+        help="Fraction of the outline budget used by the softer inner shadow",
+    )
+    parser.add_argument(
+        "--outline-detail-depth-max",
+        type=float,
+        default=0.105,
+        help="Maximum depth used by the precise outer outline detail",
+    )
+    parser.add_argument(
+        "--outline-shadow-depth-min",
+        type=float,
+        default=0.045,
+        help="Minimum depth used by the inner outline shadow",
+    )
+    parser.add_argument(
+        "--organic-scale",
+        type=float,
+        default=0.032,
+        help="Spatial scale of deterministic organic density modulation",
+    )
+    parser.add_argument(
+        "--texture-opacity-min",
+        type=float,
+        default=0.20,
+        help="Minimum texture-accent opacity",
+    )
+    parser.add_argument(
+        "--texture-opacity-max",
+        type=float,
+        default=0.31,
+        help="Maximum texture-accent opacity",
     )
 
     parser.add_argument(
@@ -176,7 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--orientation-jitter",
         type=float,
         default=7.0,
-        help="Base organic jitter; layers and zones derive their own values",
+        help="Base organic jitter; roles and zones derive their own values",
     )
     parser.add_argument(
         "--edge-orientation-strength",
@@ -276,6 +321,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             fill_depth_min=args.fill_depth_min,
             texture_depth_min=args.texture_depth_min,
         )
+        organic_config = OrganicStyleConfig(
+            outline_ratio=args.outline_ratio,
+            fill_ratio=args.fill_ratio,
+            texture_ratio=args.texture_ratio,
+            outline_shadow_fraction=args.outline_shadow_fraction,
+            outline_detail_depth_max=args.outline_detail_depth_max,
+            outline_shadow_depth_min=args.outline_shadow_depth_min,
+            outline_depth_max=args.outline_depth_max,
+            fill_depth_min=args.fill_depth_min,
+            texture_depth_min=args.texture_depth_min,
+            organic_scale=args.organic_scale,
+            texture_opacity_min=args.texture_opacity_min,
+            texture_opacity_max=args.texture_opacity_max,
+        )
     except (ValidationError, ValueError) as error:
         print("Erro de configuração:")
         print(error)
@@ -306,7 +365,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             "orientation_config": orientation_config,
         }
-        if layer_config.enabled:
+        if args.layer_mode == "organic":
+            scene_glyphs = distribute_organic_glyphs(
+                **common_arguments,
+                style_config=organic_config,
+            )
+        elif args.layer_mode == "layered":
             scene_glyphs = distribute_layered_glyphs(
                 **common_arguments,
                 layer_config=layer_config,
@@ -334,6 +398,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     zone_counts = Counter(glyph.zone for glyph in scene_glyphs)
     layer_counts = Counter(glyph.layer for glyph in scene_glyphs)
+    style_role_counts = Counter(glyph.style_role for glyph in scene_glyphs)
     orientation_counts = Counter(
         glyph.orientation_source for glyph in scene_glyphs
     )
@@ -370,11 +435,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     }
     report["layer_mode"] = args.layer_mode
     report["layers"] = asdict(layer_config)
+    report["organic_style"] = asdict(organic_config)
     report["layer_counts"] = {
         layer: layer_counts.get(layer, 0)
         for layer in ("outline", "fill", "texture")
     }
     report["layer_metrics"] = summarize_layer_metrics(scene_glyphs)
+    report["style_role_counts"] = {
+        role: style_role_counts.get(role, 0) for role in STYLE_ROLE_ORDER
+    }
+    report["style_role_metrics"] = summarize_organic_metrics(scene_glyphs)
     report["orientation"] = {
         **asdict(orientation_config),
         "mode": args.orientation_mode,
@@ -423,6 +493,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"fill={layer_counts.get('fill', 0)}, "
         f"texture={layer_counts.get('texture', 0)}"
     )
+    if args.layer_mode == "organic":
+        print(
+            "Papéis orgânicos: "
+            f"outline_shadow={style_role_counts.get('outline_shadow', 0)}, "
+            f"outline_detail={style_role_counts.get('outline_detail', 0)}, "
+            f"fill_mass={style_role_counts.get('fill_mass', 0)}, "
+            f"texture_accent={style_role_counts.get('texture_accent', 0)}"
+        )
     print(
         "Orientação: "
         f"tangent={orientation_counts.get('tangent', 0)}, "
