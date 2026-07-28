@@ -5,12 +5,17 @@ import json
 from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
+from statistics import fmean
 from typing import Sequence
 
 from pydantic import ValidationError
 
-from engine.glyph_distribution import DistributionConfig, distribute_glyphs
-from engine.image_analysis import get_valid_coordinates
+from engine.glyph_distribution import (
+    DistributionConfig,
+    OrientationConfig,
+    distribute_glyphs,
+)
+from engine.image_analysis import analyze_mask
 from engine.models import SemanticObject
 from engine.png_exporter import export_to_png
 from engine.semantic_validation import validate_scene
@@ -30,10 +35,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--font-min", type=float, default=8.0, help="Minimum font size")
     parser.add_argument("--font-max", type=float, default=28.0, help="Maximum font size")
     parser.add_argument(
-        "--rotation-min", type=float, default=-12.0, help="Minimum glyph rotation"
+        "--rotation-min",
+        type=float,
+        default=-12.0,
+        help="Minimum fallback rotation when local orientation is unavailable",
     )
     parser.add_argument(
-        "--rotation-max", type=float, default=12.0, help="Maximum glyph rotation"
+        "--rotation-max",
+        type=float,
+        default=12.0,
+        help="Maximum fallback rotation when local orientation is unavailable",
     )
     parser.add_argument(
         "--palette",
@@ -100,6 +111,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="Maximum initial glyph occupancy per core cell",
     )
     parser.add_argument(
+        "--orientation-mode",
+        choices=("tangent", "random"),
+        default="tangent",
+        help="Align glyphs with local curvature or keep random rotations",
+    )
+    parser.add_argument(
+        "--orientation-smoothing",
+        type=float,
+        default=1.25,
+        help="Gaussian smoothing applied before estimating local tangents",
+    )
+    parser.add_argument(
+        "--orientation-jitter",
+        type=float,
+        default=6.0,
+        help="Maximum organic rotation jitter around the local tangent",
+    )
+    parser.add_argument(
+        "--edge-orientation-strength",
+        type=float,
+        default=0.92,
+        help="How strongly edge glyphs follow local curvature",
+    )
+    parser.add_argument(
+        "--mid-orientation-strength",
+        type=float,
+        default=0.72,
+        help="How strongly middle glyphs follow local curvature",
+    )
+    parser.add_argument(
+        "--core-orientation-strength",
+        type=float,
+        default=0.38,
+        help="How strongly core glyphs follow local curvature",
+    )
+    parser.add_argument(
+        "--orientation-min-confidence",
+        type=float,
+        default=0.05,
+        help="Minimum tangent confidence before using curvature alignment",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("outputs"),
@@ -148,6 +201,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             mid_capacity=args.mid_capacity,
             core_capacity=args.core_capacity,
         )
+        orientation_config = OrientationConfig(
+            enabled=args.orientation_mode == "tangent",
+            edge_strength=args.edge_orientation_strength,
+            mid_strength=args.mid_orientation_strength,
+            core_strength=args.core_orientation_strength,
+            jitter_degrees=args.orientation_jitter,
+            min_confidence=args.orientation_min_confidence,
+        )
     except (ValidationError, ValueError) as error:
         print("Erro de configuração:")
         print(error)
@@ -159,12 +220,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     try:
-        valid_pixels, image_width, image_height = get_valid_coordinates(
-            target_object.mask_path
+        analysis = analyze_mask(
+            target_object.mask_path,
+            orientation_smoothing=args.orientation_smoothing,
         )
         scene_glyphs = distribute_glyphs(
             object_id=target_object.id,
-            valid_coords=valid_pixels,
+            valid_coords=analysis.valid_coordinates,
             character_sequence=target_object.character_sequence,
             glyph_count=target_object.glyph_count,
             font_size_range=target_object.font_size_range,
@@ -172,6 +234,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             seed=target_object.seed,
             rotation_range=(args.rotation_min, args.rotation_max),
             distribution_config=distribution_config,
+            orientation_field=(
+                analysis.tangent_field
+                if orientation_config.enabled
+                else None
+            ),
+            orientation_config=orientation_config,
         )
     except (OSError, ValueError) as error:
         print(f"Erro durante a geração: {error}")
@@ -184,11 +252,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     report_path = args.output_dir / f"{base_name}_validation.json"
     png_path = args.output_dir / f"{base_name}_preview.png"
 
-    svg_output = render_to_svg(scene_glyphs, width=image_width, height=image_height)
+    svg_output = render_to_svg(
+        scene_glyphs,
+        width=analysis.width,
+        height=analysis.height,
+    )
     svg_path.write_text(svg_output, encoding="utf-8")
     _write_json(json_path, [glyph.model_dump() for glyph in scene_glyphs])
 
     zone_counts = Counter(glyph.zone for glyph in scene_glyphs)
+    orientation_counts = Counter(
+        glyph.orientation_source for glyph in scene_glyphs
+    )
+    tangent_confidences = [
+        glyph.orientation_confidence
+        for glyph in scene_glyphs
+        if glyph.orientation_source == "tangent"
+    ]
+
     report = validate_scene(
         scene_glyphs,
         target_object.allowed_characters,
@@ -201,6 +282,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     report["zone_counts"] = {
         zone: zone_counts.get(zone, 0) for zone in ("edge", "mid", "core")
     }
+    report["orientation"] = {
+        **asdict(orientation_config),
+        "mode": args.orientation_mode,
+        "smoothing": args.orientation_smoothing,
+    }
+    report["orientation_counts"] = {
+        source: orientation_counts.get(source, 0)
+        for source in ("tangent", "random")
+    }
+    report["mean_tangent_confidence"] = (
+        fmean(tangent_confidences) if tangent_confidences else 0.0
+    )
     _write_json(report_path, report)
 
     if not report["is_valid"]:
@@ -220,6 +313,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"edge={zone_counts.get('edge', 0)}, "
         f"mid={zone_counts.get('mid', 0)}, "
         f"core={zone_counts.get('core', 0)}"
+    )
+    print(
+        "Orientação: "
+        f"tangent={orientation_counts.get('tangent', 0)}, "
+        f"random={orientation_counts.get('random', 0)}"
     )
     print(f"Artefatos gerados em: {args.output_dir.resolve()}")
     return 0
