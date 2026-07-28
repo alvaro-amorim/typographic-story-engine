@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import List, Set, Tuple
+from typing import List, Literal, Set, Tuple
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -76,6 +76,8 @@ class Glyph(BaseModel):
     font_size: float = Field(gt=0.0)
     opacity: float = Field(default=1.0, ge=0.0, le=1.0)
     color: str = "#000000"
+    zone: Literal["edge", "mid", "core"] = "mid"
+    depth: float = Field(default=0.0, ge=0.0, le=1.0)
 
     @field_validator("character")
     @classmethod
