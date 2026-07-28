@@ -78,6 +78,8 @@ def test_glyph_normalizes_character_and_color() -> None:
 
     assert glyph.character == "C"
     assert glyph.color == "#AABBCC"
+    assert glyph.zone == "mid"
+    assert glyph.depth == 0.0
 
 
 def test_same_seed_generates_identical_glyphs() -> None:
@@ -121,9 +123,11 @@ def test_generated_values_stay_inside_configured_ranges() -> None:
     glyphs = render()
 
     assert all(8 <= glyph.font_size <= 28 for glyph in glyphs)
-    assert all(0.6 <= glyph.opacity <= 1.0 for glyph in glyphs)
+    assert all(0.38 <= glyph.opacity <= 1.0 for glyph in glyphs)
     assert all(-12 <= glyph.rotation <= 12 for glyph in glyphs)
     assert all(glyph.character in {"M", "O", "N"} for glyph in glyphs)
+    assert all(glyph.zone in {"edge", "mid", "core"} for glyph in glyphs)
+    assert all(0.0 <= glyph.depth <= 1.0 for glyph in glyphs)
 
 
 @pytest.mark.parametrize(
