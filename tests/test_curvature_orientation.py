@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from scipy.ndimage import distance_transform_edt
 
 from engine.glyph_distribution import (
     DistributionConfig,
@@ -13,8 +14,6 @@ from engine.image_analysis import compute_tangent_field
 def test_tangent_field_follows_rectangle_edges() -> None:
     mask = np.zeros((25, 25), dtype=bool)
     mask[4:21, 4:21] = True
-
-    from scipy.ndimage import distance_transform_edt
 
     distance_map = distance_transform_edt(mask)
     field = compute_tangent_field(
@@ -30,6 +29,18 @@ def test_tangent_field_follows_rectangle_edges() -> None:
     assert abs(abs(left_angle) - 90.0) < 12.0
     assert top_confidence > 0.5
     assert left_confidence > 0.5
+
+
+@pytest.mark.parametrize("shape", [(1, 8), (8, 1)])
+def test_tangent_field_supports_single_pixel_axes(shape: tuple[int, int]) -> None:
+    mask = np.ones(shape, dtype=bool)
+    distance_map = distance_transform_edt(mask)
+
+    field = compute_tangent_field(distance_map, mask)
+
+    assert len(field) == 8
+    assert all(-90.0 <= angle < 90.0 for angle, _ in field.values())
+    assert all(0.0 <= confidence <= 1.0 for _, confidence in field.values())
 
 
 def test_axis_angle_blend_handles_180_degree_equivalence() -> None:
