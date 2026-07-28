@@ -11,13 +11,44 @@ O MVP recebe uma máscara raster, calcula a distância de cada pixel até a bord
 - relatório de validação semântica;
 - prévia em PNG.
 
+O cálculo de distância é implementado no próprio projeto com NumPy. O núcleo não depende de SciPy, Cairo ou outras bibliotecas científicas nativas difíceis de instalar no Windows.
+
 ## Instalação no Windows
+
+Crie e ative um ambiente virtual para evitar misturar as dependências do projeto com o Python global:
 
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements-dev.txt
+python -m pip install -r requirements-dev.txt
+```
+
+Confirme que o terminal está usando o Python do ambiente virtual:
+
+```powershell
+python -c "import sys; print(sys.executable)"
+```
+
+O caminho exibido deve terminar em:
+
+```text
+ typographic-story-engine\venv\Scripts\python.exe
+```
+
+Também é possível executar explicitamente pelo ambiente virtual sem ativá-lo:
+
+```powershell
+.\venv\Scripts\python.exe -m pytest -q
+```
+
+## Atualizar a branch de desenvolvimento
+
+```powershell
+git fetch origin
+git switch agent/deterministic-core
+git pull origin agent/deterministic-core
+python -m pip install -r requirements-dev.txt
 ```
 
 ## Gerar uma cena
@@ -49,10 +80,19 @@ Exemplo de paleta:
 ## Testes
 
 ```powershell
-pytest -q
+python -m pytest -q
 ```
 
-Os testes verificam determinismo, preservação da frequência de letras repetidas, isolamento do estado aleatório global, limites visuais e validação dos modelos.
+Os testes verificam determinismo, preservação da frequência de letras repetidas, isolamento do estado aleatório global, limites visuais, análise de máscaras sem SciPy e validação dos modelos.
+
+## Solução para instalações anteriores
+
+Versões anteriores do projeto usavam SciPy. Depois de atualizar a branch, ele não é mais necessário. Você pode mantê-lo instalado porque o projeto não fará o import, ou removê-lo do ambiente virtual:
+
+```powershell
+python -m pip uninstall scipy -y
+python -m pip install -r requirements-dev.txt
+```
 
 ## Próximo marco
 
