@@ -1,31 +1,50 @@
 # Typographic Story Engine
 
-Motor experimental para reconstruir objetos com glyphs semanticamente restritos. Um objeto `MOON`, por exemplo, só pode usar as letras `M`, `O`, `O`, `N`; a repetição do `O` também influencia a frequência de amostragem.
+Motor experimental para reconstruir objetos usando apenas glyphs semanticamente permitidos. Um objeto `MOON`, por exemplo, só pode usar `M`, `O`, `O`, `N`; a repetição do `O` também influencia a frequência de amostragem.
 
 ## Estado atual
 
-O MVP recebe uma máscara raster, calcula a distância exata de cada pixel até a borda e gera uma composição tipográfica determinística com três zonas visuais:
+O MVP recebe uma máscara raster e gera uma composição determinística em SVG estrito. O pipeline combina:
 
-- `edge`: contorno com mais glyphs, letras menores e maior opacidade;
-- `mid`: transição com densidade e tamanho intermediários;
-- `core`: núcleo mais leve, espaçado e com menos sobreposição visual.
+1. distância exata até a borda;
+2. distribuição espacial sem aglomeração excessiva;
+3. orientação adaptativa pela curvatura local;
+4. renderer tipográfico em camadas.
 
-O amostrador utiliza uma grade de ocupação espacial para espalhar as letras antes de reutilizar regiões próximas. Um campo de tangentes é calculado a partir do gradiente suavizado do mapa de distância, mas sua influência agora é adaptativa: contorno, profundidade e confiança local determinam quanto cada letra acompanha a curvatura.
+Cada glyph registra posição, tamanho, rotação, opacidade, cor, profundidade, zona, camada e métricas de orientação.
 
-Isso mantém o arco organizado nas bordas e reduz faixas radiais ou redemoinhos nas regiões internas instáveis.
+## Camadas tipográficas
 
-Artefatos gerados:
+O modo padrão é `layered`. Ele separa três responsabilidades visuais:
 
-- SVG estrito composto por elementos `<text>`;
-- JSON com posição, rotação, tamanho, opacidade, cor, zona, profundidade e orientação de cada glyph;
-- relatório de validação semântica, estatísticas por zona e métricas de força efetiva;
-- prévia em PNG.
+- `outline`: desenha os contornos externo e interno com letras menores, mais opacas e fortemente orientadas;
+- `fill`: constrói a massa do objeto com densidade e orientação moderadas;
+- `texture`: adiciona riqueza interna com baixa opacidade e pouca influência estrutural.
 
-O mapa de distância usa `scipy.ndimage.distance_transform_edt`. A orientação usa `gaussian_filter`, gradiente local, tangentes com confiança normalizada e atenuação por profundidade.
+A divisão padrão para 8.000 glyphs é:
+
+- `outline`: 2.800 glyphs — 35%;
+- `fill`: 4.000 glyphs — 50%;
+- `texture`: 1.200 glyphs — 15%.
+
+O SVG agrupa os elementos em:
+
+```text
+layer_texture
+layer_fill
+layer_outline
+```
+
+Cada `<text>` possui `data-glyph-id`, `data-object-id`, `data-layer` e `data-zone`. Essa estrutura prepara o arquivo para animações e correspondência de glyphs entre cenas.
+
+## Artefatos gerados
+
+- SVG estrito composto apenas por `<text>` e grupos organizacionais;
+- JSON com o estado completo de cada glyph;
+- relatório de validação semântica, distribuição e métricas por camada;
+- prévia PNG.
 
 ## Instalação no Windows
-
-Crie e ative um ambiente virtual para evitar misturar as dependências do projeto com o Python global:
 
 ```powershell
 python -m venv venv
@@ -34,124 +53,107 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
 ```
 
-Confirme que o terminal está usando o Python do ambiente virtual:
+Confirme o ambiente ativo:
 
 ```powershell
 python -c "import sys; print(sys.executable)"
 ```
 
-O caminho exibido deve terminar em:
+O caminho deve terminar em:
 
 ```text
 typographic-story-engine\venv\Scripts\python.exe
 ```
 
-## Testar a orientação adaptativa
-
-Com o `venv` ativo:
+## Testar o renderer em camadas
 
 ```powershell
 git fetch origin
-git switch agent/adaptive-orientation-field
-git pull origin agent/adaptive-orientation-field
+git switch agent/layered-typographic-renderer
+git pull origin agent/layered-typographic-renderer
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-Gere a nova lua:
+Gere a lua:
 
 ```powershell
 python render_object_from_mask.py `
-  --id moon_adaptive `
+  --id moon_layered `
   --word MOON `
   --mask moon_mask.png `
   --count 8000 `
   --seed 817392 `
   --palette "#172033" "#344966" "#596773" "#8A795D" `
-  --output-dir outputs/moon-adaptive
+  --output-dir outputs/moon-layered
 ```
 
-A configuração padrão mantém a divisão:
+O terminal deve registrar aproximadamente:
 
-- 45% dos glyphs para `edge`;
-- 35% para `mid`;
-- 20% para `core`.
+```text
+Camadas: outline=2800, fill=4000, texture=1200
+```
 
-A orientação usa forças máximas mais conservadoras:
-
-- `edge`: `0.90`, mantendo o arco do contorno;
-- `mid`: `0.48`, reduzindo faixas internas;
-- `core`: `0.12`, permitindo predominância do fallback orgânico.
-
-Além disso:
-
-- suavização padrão do campo: `2.0`;
-- confiança mínima base: `0.14`;
-- o núcleo exige o dobro da confiança base;
-- confiança intermediária é reduzida por expoente `1.60`;
-- o efeito da tangente cai progressivamente com a profundidade;
-- o jitter é menor no contorno e maior no núcleo.
-
-O relatório registra `orientation_counts`, `mean_tangent_confidence`, `mean_orientation_strength` e `mean_orientation_strength_by_zone`.
-
-## Controles de orientação
-
-- `--orientation-mode tangent|random`: ativa a orientação adaptativa ou usa apenas o fallback;
-- `--orientation-smoothing`: suavização antes do gradiente; padrão `2.0`;
-- `--orientation-jitter`: jitter base; padrão `7`;
-- `--edge-orientation-strength`: força máxima no contorno; padrão `0.90`;
-- `--mid-orientation-strength`: força máxima na zona média; padrão `0.48`;
-- `--core-orientation-strength`: força máxima no núcleo; padrão `0.12`;
-- `--orientation-min-confidence`: confiança mínima base; padrão `0.14`;
-- `--orientation-confidence-power`: supressão de confiança média; padrão `1.60`;
-- `--rotation-min` e `--rotation-max`: fallback quando a orientação local não é confiável.
-
-Para comparar diretamente com rotações de fallback:
+Para comparar com o renderer anterior:
 
 ```powershell
 python render_object_from_mask.py `
-  --id moon_random `
+  --id moon_legacy `
   --word MOON `
   --mask moon_mask.png `
   --count 8000 `
   --seed 817392 `
-  --orientation-mode random `
-  --output-dir outputs/moon-random
+  --layer-mode legacy `
+  --palette "#172033" "#344966" "#596773" "#8A795D" `
+  --output-dir outputs/moon-legacy
 ```
 
-## Controles da distribuição
+## Controles de camada
 
-- `--edge-threshold`: limite de profundidade do contorno; padrão `0.18`;
-- `--mid-threshold`: limite entre a zona média e o núcleo; padrão `0.55`;
-- `--edge-ratio`, `--mid-ratio`, `--core-ratio`: orçamento relativo de glyphs;
-- `--cell-size`: tamanho da célula da grade espacial; padrão `8` pixels;
-- `--edge-capacity`, `--mid-capacity`, `--core-capacity`: ocupação inicial máxima por célula;
-- `--font-min` e `--font-max`: faixa geral de tamanho;
-- `--palette`: uma ou mais cores hexadecimais;
-- `--seed`: reproduz exatamente a mesma cena;
-- `--skip-png`: gera apenas SVG, JSON e validação.
+- `--layer-mode layered|legacy`: alterna entre o novo renderer e o comportamento anterior;
+- `--outline-ratio`: orçamento do contorno; padrão `0.35`;
+- `--fill-ratio`: orçamento do preenchimento; padrão `0.50`;
+- `--texture-ratio`: orçamento da textura; padrão `0.15`;
+- `--outline-depth-max`: largura da faixa de contorno; padrão `0.18`;
+- `--fill-depth-min`: profundidade mínima do preenchimento; padrão `0.035`;
+- `--texture-depth-min`: profundidade mínima da textura; padrão `0.20`.
 
-## Testes
+Os valores de proporção são normalizados automaticamente e sempre preservam o total exato de glyphs.
+
+## Orientação adaptativa
+
+A orientação continua dependente de zona, profundidade e confiança local:
+
+- `edge`: força máxima `0.90`;
+- `mid`: força máxima `0.48`;
+- `core`: força máxima `0.12`.
+
+Cada camada multiplica essas forças:
+
+- `outline`: `1.00`;
+- `fill`: `0.45`;
+- `texture`: `0.08`.
+
+Assim, o contorno acompanha a forma, o preenchimento mantém fluxo moderado e a textura permanece orgânica.
+
+## Validação
 
 ```powershell
 python -m pytest -q
 ```
 
-Os testes verificam:
+A suíte cobre:
 
 - determinismo por seed;
 - frequência de letras repetidas;
-- divisão exata do orçamento por zonas;
-- espalhamento por células de ocupação;
-- direção das tangentes em bordas horizontais e verticais;
-- equivalência de orientação em 180 graus;
-- queda da força entre `edge`, `mid` e `core`;
-- supressão adicional no núcleo profundo;
-- confiança mínima diferente por zona;
-- fallback aleatório em regiões instáveis;
-- isolamento do estado aleatório global;
-- leitura e validação das máscaras.
+- distribuição exata por zonas e camadas;
+- ocupação espacial;
+- orientação adaptativa;
+- responsabilidades visuais distintas entre `outline`, `fill` e `texture`;
+- ordem de pintura do SVG;
+- ausência de formas proibidas;
+- leitura e validação de máscaras.
 
 ## Próximo marco
 
-Depois da validação visual da orientação adaptativa, o próximo passo será adicionar camadas tipográficas especializadas: contorno estrutural, preenchimento e textura, cada uma com comportamento visual e de animação próprio.
+Depois da validação visual do renderer em camadas, o próximo passo será gerar uma cena com vários objetos semânticos e compor cada objeto em um grupo independente, preparando transições entre dois SVGs.
