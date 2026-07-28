@@ -10,6 +10,8 @@ from typing import List, Literal, Tuple
 from engine.models import Glyph
 
 ValidCoordinate = Tuple[int, int, float]
+OrientationSample = Tuple[float, float]
+OrientationField = Mapping[tuple[int, int], OrientationSample]
 ZoneName = Literal["edge", "mid", "core"]
 ZONE_NAMES: tuple[ZoneName, ...] = ("edge", "mid", "core")
 
@@ -60,6 +62,35 @@ class DistributionConfig:
             "edge": self.edge_capacity,
             "mid": self.mid_capacity,
             "core": self.core_capacity,
+        }
+
+
+@dataclass(frozen=True)
+class OrientationConfig:
+    """Controls how strongly glyphs follow the local tangent field."""
+
+    enabled: bool = True
+    edge_strength: float = 0.92
+    mid_strength: float = 0.72
+    core_strength: float = 0.38
+    jitter_degrees: float = 6.0
+    min_confidence: float = 0.05
+
+    def __post_init__(self) -> None:
+        strengths = self.zone_strengths
+        if any(not 0.0 <= strength <= 1.0 for strength in strengths.values()):
+            raise ValueError("orientation strengths must be between zero and one")
+        if self.jitter_degrees < 0.0:
+            raise ValueError("jitter_degrees cannot be negative")
+        if not 0.0 <= self.min_confidence <= 1.0:
+            raise ValueError("min_confidence must be between zero and one")
+
+    @property
+    def zone_strengths(self) -> dict[ZoneName, float]:
+        return {
+            "edge": self.edge_strength,
+            "mid": self.mid_strength,
+            "core": self.core_strength,
         }
 
 
@@ -212,25 +243,25 @@ def sample_zone_coordinates(
         rng.shuffle(bucket)
 
     selected: list[ValidCoordinate] = []
+    unique_target = min(target_count, len(coordinates))
     for _ in range(capacity):
         active_cells = [cell for cell in cell_keys if buckets[cell]]
         rng.shuffle(active_cells)
         for cell in active_cells:
             selected.append(buckets[cell].pop())
-            if len(selected) == min(target_count, len(coordinates)):
+            if len(selected) == unique_target:
                 break
-        if len(selected) == min(target_count, len(coordinates)):
+        if len(selected) == unique_target:
             break
 
-    # At cell_size=1 a capacity greater than one cannot add unique coordinates
-    # from the same pixel. Fill any remaining unique quota without clustering
-    # rules, which is still preferable to duplicating coordinates.
-    if len(selected) < min(target_count, len(coordinates)):
-        remaining = [coordinate for bucket in buckets.values() for coordinate in bucket]
+    if len(selected) < unique_target:
+        remaining = [
+            coordinate
+            for bucket in buckets.values()
+            for coordinate in bucket
+        ]
         rng.shuffle(remaining)
-        selected.extend(
-            remaining[: min(target_count, len(coordinates)) - len(selected)]
-        )
+        selected.extend(remaining[: unique_target - len(selected)])
 
     if len(selected) < target_count:
         reusable = selected or list(coordinates)
@@ -278,7 +309,10 @@ def _font_size_for_zone(
     zone_minimum, zone_maximum = ranges[zone]
     base_size = _interpolate(zone_minimum, zone_maximum, progress)
     variance = max(0.35, base_size * 0.08)
-    return max(minimum, min(maximum, rng.uniform(base_size - variance, base_size + variance)))
+    return max(
+        minimum,
+        min(maximum, rng.uniform(base_size - variance, base_size + variance)),
+    )
 
 
 def _opacity_for_zone(
@@ -295,7 +329,84 @@ def _opacity_for_zone(
     }
     start, end = ranges[zone]
     base_opacity = _interpolate(start, end, progress)
-    return max(0.0, min(1.0, base_opacity + rng.uniform(-0.035, 0.035)))
+    return max(
+        0.0,
+        min(1.0, base_opacity + rng.uniform(-0.035, 0.035)),
+    )
+
+
+def normalize_axis_angle(angle: float) -> float:
+    """Normalize an orientation axis to the equivalent range [-90, 90)."""
+    return ((float(angle) + 90.0) % 180.0) - 90.0
+
+
+def blend_axis_angles(
+    random_angle: float,
+    tangent_angle: float,
+    tangent_strength: float,
+) -> float:
+    """Blend text orientations while respecting 180-degree axis equivalence."""
+    strength = max(0.0, min(1.0, float(tangent_strength)))
+    random_radians = math.radians(random_angle * 2.0)
+    tangent_radians = math.radians(tangent_angle * 2.0)
+
+    x_component = (
+        (1.0 - strength) * math.cos(random_radians)
+        + strength * math.cos(tangent_radians)
+    )
+    y_component = (
+        (1.0 - strength) * math.sin(random_radians)
+        + strength * math.sin(tangent_radians)
+    )
+
+    if abs(x_component) <= 1e-12 and abs(y_component) <= 1e-12:
+        return normalize_axis_angle(tangent_angle)
+
+    blended = math.degrees(math.atan2(y_component, x_component)) / 2.0
+    return normalize_axis_angle(blended)
+
+
+def _rotation_for_glyph(
+    zone: ZoneName,
+    position: tuple[int, int],
+    rotation_range: Tuple[float, float],
+    orientation_field: OrientationField | None,
+    orientation_config: OrientationConfig,
+    rng: random.Random,
+) -> tuple[float, float | None, float, Literal["random", "tangent"]]:
+    minimum, maximum = rotation_range
+    random_angle = rng.uniform(minimum, maximum)
+
+    if not orientation_config.enabled or orientation_field is None:
+        return random_angle, None, 0.0, "random"
+
+    sample = orientation_field.get(position)
+    if sample is None:
+        return random_angle, None, 0.0, "random"
+
+    tangent_angle, raw_confidence = sample
+    confidence = max(0.0, min(1.0, float(raw_confidence)))
+    if confidence < orientation_config.min_confidence:
+        return random_angle, float(tangent_angle), confidence, "random"
+
+    structural_strength = (
+        orientation_config.zone_strengths[zone] * confidence
+    )
+    rotation = blend_axis_angles(
+        random_angle,
+        tangent_angle,
+        structural_strength,
+    )
+    rotation += rng.uniform(
+        -orientation_config.jitter_degrees,
+        orientation_config.jitter_degrees,
+    )
+    return (
+        normalize_axis_angle(rotation),
+        normalize_axis_angle(tangent_angle),
+        confidence,
+        "tangent",
+    )
 
 
 def distribute_glyphs(
@@ -308,8 +419,10 @@ def distribute_glyphs(
     seed: int = 42,
     rotation_range: Tuple[float, float] = (-12.0, 12.0),
     distribution_config: DistributionConfig | None = None,
+    orientation_field: OrientationField | None = None,
+    orientation_config: OrientationConfig | None = None,
 ) -> List[Glyph]:
-    """Create deterministic, shape-aware glyphs without mutating global RNG state."""
+    """Create deterministic, shape-aware and curvature-aware glyphs."""
     if not valid_coords:
         raise ValueError("valid_coords cannot be empty")
     if not character_sequence:
@@ -321,13 +434,16 @@ def distribute_glyphs(
 
     min_size, max_size = font_size_range
     if min_size <= 0 or max_size <= 0 or min_size > max_size:
-        raise ValueError("font_size_range must contain positive ascending values")
+        raise ValueError(
+            "font_size_range must contain positive ascending values"
+        )
 
     min_rotation, max_rotation = rotation_range
     if min_rotation > max_rotation:
         raise ValueError("rotation_range minimum cannot exceed maximum")
 
     config = distribution_config or DistributionConfig()
+    orientation = orientation_config or OrientationConfig()
     rng = random.Random(seed)
 
     coordinates_by_zone: dict[ZoneName, list[ValidCoordinate]] = {
@@ -366,6 +482,19 @@ def distribute_glyphs(
         )
 
         for x, y, normalized_distance in selected_coordinates:
+            (
+                rotation,
+                orientation_angle,
+                orientation_confidence,
+                orientation_source,
+            ) = _rotation_for_glyph(
+                zone=zone,
+                position=(int(x), int(y)),
+                rotation_range=rotation_range,
+                orientation_field=orientation_field,
+                orientation_config=orientation,
+                rng=rng,
+            )
             glyphs.append(
                 Glyph(
                     id=f"{object_id}_glyph_{index}",
@@ -373,7 +502,7 @@ def distribute_glyphs(
                     character=rng.choice(character_sequence),
                     x=float(x),
                     y=float(y),
-                    rotation=rng.uniform(min_rotation, max_rotation),
+                    rotation=float(rotation),
                     font_size=float(
                         _font_size_for_zone(
                             zone,
@@ -394,12 +523,13 @@ def distribute_glyphs(
                     color=rng.choice(palette),
                     zone=zone,
                     depth=normalized_distance,
+                    orientation_angle=orientation_angle,
+                    orientation_confidence=orientation_confidence,
+                    orientation_source=orientation_source,
                 )
             )
             index += 1
 
-    # Core is painted first and the precise edge layer last, keeping the
-    # silhouette readable even when glyphs overlap.
     zone_render_order = {"core": 0, "mid": 1, "edge": 2}
     glyphs.sort(
         key=lambda glyph: (
