@@ -1,4 +1,5 @@
 Pillow
 numpy
+scipy
 pydantic>=2
 PyMuPDF
