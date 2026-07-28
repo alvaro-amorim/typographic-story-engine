@@ -28,6 +28,13 @@ def normalize_axis_angle(angle: float) -> float:
     return ((float(angle) + 90.0) % 180.0) - 90.0
 
 
+def _safe_gradient(values: np.ndarray, axis: int) -> np.ndarray:
+    """Return a zero gradient when an image axis contains a single pixel."""
+    if values.shape[axis] < 2:
+        return np.zeros_like(values, dtype=float)
+    return np.gradient(values, axis=axis)
+
+
 def compute_tangent_field(
     distance_map: np.ndarray,
     binary_mask: np.ndarray,
@@ -57,7 +64,8 @@ def compute_tangent_field(
         if smoothing_sigma > 0.0
         else distance_map.astype(float)
     )
-    gradient_y, gradient_x = np.gradient(smoothed)
+    gradient_y = _safe_gradient(smoothed, axis=0)
+    gradient_x = _safe_gradient(smoothed, axis=1)
     magnitude = np.hypot(gradient_x, gradient_y)
 
     foreground_magnitude = magnitude[mask]
