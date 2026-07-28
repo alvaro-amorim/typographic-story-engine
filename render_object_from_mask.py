@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
+from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
 
 from pydantic import ValidationError
 
-from engine.glyph_distribution import distribute_glyphs
+from engine.glyph_distribution import DistributionConfig, distribute_glyphs
 from engine.image_analysis import get_valid_coordinates
 from engine.models import SemanticObject
 from engine.png_exporter import export_to_png
@@ -42,6 +44,60 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--seed", type=int, default=817392, help="Seed used for deterministic rendering"
+    )
+    parser.add_argument(
+        "--edge-threshold",
+        type=float,
+        default=0.18,
+        help="Maximum normalized depth classified as edge",
+    )
+    parser.add_argument(
+        "--mid-threshold",
+        type=float,
+        default=0.55,
+        help="Maximum normalized depth classified as middle zone",
+    )
+    parser.add_argument(
+        "--edge-ratio",
+        type=float,
+        default=0.45,
+        help="Relative glyph budget assigned to the edge",
+    )
+    parser.add_argument(
+        "--mid-ratio",
+        type=float,
+        default=0.35,
+        help="Relative glyph budget assigned to the middle zone",
+    )
+    parser.add_argument(
+        "--core-ratio",
+        type=float,
+        default=0.20,
+        help="Relative glyph budget assigned to the core",
+    )
+    parser.add_argument(
+        "--cell-size",
+        type=int,
+        default=8,
+        help="Spatial occupancy grid cell size in mask pixels",
+    )
+    parser.add_argument(
+        "--edge-capacity",
+        type=int,
+        default=4,
+        help="Maximum initial glyph occupancy per edge cell",
+    )
+    parser.add_argument(
+        "--mid-capacity",
+        type=int,
+        default=3,
+        help="Maximum initial glyph occupancy per middle cell",
+    )
+    parser.add_argument(
+        "--core-capacity",
+        type=int,
+        default=2,
+        help="Maximum initial glyph occupancy per core cell",
     )
     parser.add_argument(
         "--output-dir",
@@ -81,7 +137,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             palette=args.palette,
             seed=args.seed,
         )
-    except ValidationError as error:
+        distribution_config = DistributionConfig(
+            edge_threshold=args.edge_threshold,
+            mid_threshold=args.mid_threshold,
+            edge_ratio=args.edge_ratio,
+            mid_ratio=args.mid_ratio,
+            core_ratio=args.core_ratio,
+            cell_size=args.cell_size,
+            edge_capacity=args.edge_capacity,
+            mid_capacity=args.mid_capacity,
+            core_capacity=args.core_capacity,
+        )
+    except (ValidationError, ValueError) as error:
         print("Erro de configuração:")
         print(error)
         return 2
@@ -91,23 +158,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"'{target_object.word}' com seed {target_object.seed}..."
     )
 
-    valid_pixels, image_width, image_height = get_valid_coordinates(
-        target_object.mask_path
-    )
-    if not valid_pixels:
-        print("Erro: a máscara não contém pixels escuros válidos para renderização.")
+    try:
+        valid_pixels, image_width, image_height = get_valid_coordinates(
+            target_object.mask_path
+        )
+        scene_glyphs = distribute_glyphs(
+            object_id=target_object.id,
+            valid_coords=valid_pixels,
+            character_sequence=target_object.character_sequence,
+            glyph_count=target_object.glyph_count,
+            font_size_range=target_object.font_size_range,
+            palette=target_object.palette,
+            seed=target_object.seed,
+            rotation_range=(args.rotation_min, args.rotation_max),
+            distribution_config=distribution_config,
+        )
+    except (OSError, ValueError) as error:
+        print(f"Erro durante a geração: {error}")
         return 2
-
-    scene_glyphs = distribute_glyphs(
-        object_id=target_object.id,
-        valid_coords=valid_pixels,
-        character_sequence=target_object.character_sequence,
-        glyph_count=target_object.glyph_count,
-        font_size_range=target_object.font_size_range,
-        palette=target_object.palette,
-        seed=target_object.seed,
-        rotation_range=(args.rotation_min, args.rotation_max),
-    )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     base_name = target_object.id
@@ -120,6 +188,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     svg_path.write_text(svg_output, encoding="utf-8")
     _write_json(json_path, [glyph.model_dump() for glyph in scene_glyphs])
 
+    zone_counts = Counter(glyph.zone for glyph in scene_glyphs)
     report = validate_scene(
         scene_glyphs,
         target_object.allowed_characters,
@@ -128,6 +197,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     report["seed"] = target_object.seed
     report["word"] = target_object.word
     report["character_sequence"] = list(target_object.character_sequence)
+    report["distribution"] = asdict(distribution_config)
+    report["zone_counts"] = {
+        zone: zone_counts.get(zone, 0) for zone in ("edge", "mid", "core")
+    }
     _write_json(report_path, report)
 
     if not report["is_valid"]:
@@ -142,6 +215,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
 
     print("Validação aprovada: SVG estrito e caracteres semânticos corretos.")
+    print(
+        "Distribuição por zona: "
+        f"edge={zone_counts.get('edge', 0)}, "
+        f"mid={zone_counts.get('mid', 0)}, "
+        f"core={zone_counts.get('core', 0)}"
+    )
     print(f"Artefatos gerados em: {args.output_dir.resolve()}")
     return 0
 
