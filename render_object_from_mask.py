@@ -114,43 +114,49 @@ def build_parser() -> argparse.ArgumentParser:
         "--orientation-mode",
         choices=("tangent", "random"),
         default="tangent",
-        help="Align glyphs with local curvature or keep random rotations",
+        help="Use adaptive local curvature or keep fallback rotations",
     )
     parser.add_argument(
         "--orientation-smoothing",
         type=float,
-        default=1.25,
+        default=2.0,
         help="Gaussian smoothing applied before estimating local tangents",
     )
     parser.add_argument(
         "--orientation-jitter",
         type=float,
-        default=6.0,
-        help="Maximum organic rotation jitter around the local tangent",
+        default=7.0,
+        help="Base organic jitter; edge uses less and core uses more",
     )
     parser.add_argument(
         "--edge-orientation-strength",
         type=float,
-        default=0.92,
-        help="How strongly edge glyphs follow local curvature",
+        default=0.90,
+        help="Maximum curvature influence on edge glyphs",
     )
     parser.add_argument(
         "--mid-orientation-strength",
         type=float,
-        default=0.72,
-        help="How strongly middle glyphs follow local curvature",
+        default=0.48,
+        help="Maximum curvature influence on middle glyphs",
     )
     parser.add_argument(
         "--core-orientation-strength",
         type=float,
-        default=0.38,
-        help="How strongly core glyphs follow local curvature",
+        default=0.12,
+        help="Maximum curvature influence on core glyphs",
     )
     parser.add_argument(
         "--orientation-min-confidence",
         type=float,
-        default=0.05,
-        help="Minimum tangent confidence before using curvature alignment",
+        default=0.14,
+        help="Base confidence threshold; the core requires twice this value",
+    )
+    parser.add_argument(
+        "--orientation-confidence-power",
+        type=float,
+        default=1.60,
+        help="Exponent that suppresses medium-confidence tangent directions",
     )
     parser.add_argument(
         "--output-dir",
@@ -203,11 +209,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         orientation_config = OrientationConfig(
             enabled=args.orientation_mode == "tangent",
+            adaptive=True,
             edge_strength=args.edge_orientation_strength,
             mid_strength=args.mid_orientation_strength,
             core_strength=args.core_orientation_strength,
             jitter_degrees=args.orientation_jitter,
             min_confidence=args.orientation_min_confidence,
+            confidence_power=args.orientation_confidence_power,
         )
     except (ValidationError, ValueError) as error:
         print("Erro de configuração:")
@@ -269,6 +277,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         for glyph in scene_glyphs
         if glyph.orientation_source == "tangent"
     ]
+    tangent_strengths = [
+        glyph.orientation_strength
+        for glyph in scene_glyphs
+        if glyph.orientation_source == "tangent"
+    ]
+    strength_by_zone = {
+        zone: [
+            glyph.orientation_strength
+            for glyph in scene_glyphs
+            if glyph.zone == zone
+        ]
+        for zone in ("edge", "mid", "core")
+    }
 
     report = validate_scene(
         scene_glyphs,
@@ -286,6 +307,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         **asdict(orientation_config),
         "mode": args.orientation_mode,
         "smoothing": args.orientation_smoothing,
+        "zone_jitters": orientation_config.zone_jitters,
+        "zone_min_confidences": orientation_config.zone_min_confidences,
+        "zone_depth_falloffs": orientation_config.zone_depth_falloffs,
     }
     report["orientation_counts"] = {
         source: orientation_counts.get(source, 0)
@@ -294,6 +318,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     report["mean_tangent_confidence"] = (
         fmean(tangent_confidences) if tangent_confidences else 0.0
     )
+    report["mean_orientation_strength"] = (
+        fmean(tangent_strengths) if tangent_strengths else 0.0
+    )
+    report["mean_orientation_strength_by_zone"] = {
+        zone: fmean(values) if values else 0.0
+        for zone, values in strength_by_zone.items()
+    }
     _write_json(report_path, report)
 
     if not report["is_valid"]:
@@ -317,7 +348,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(
         "Orientação: "
         f"tangent={orientation_counts.get('tangent', 0)}, "
-        f"random={orientation_counts.get('random', 0)}"
+        f"random={orientation_counts.get('random', 0)}, "
+        f"força_média={report['mean_orientation_strength']:.3f}"
     )
     print(f"Artefatos gerados em: {args.output_dir.resolve()}")
     return 0
