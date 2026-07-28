@@ -16,6 +16,11 @@ from engine.glyph_distribution import (
     distribute_glyphs,
 )
 from engine.image_analysis import analyze_mask
+from engine.layered_distribution import (
+    LayerConfig,
+    distribute_layered_glyphs,
+    summarize_layer_metrics,
+)
 from engine.models import SemanticObject
 from engine.png_exporter import export_to_png
 from engine.semantic_validation import validate_scene
@@ -56,6 +61,50 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--seed", type=int, default=817392, help="Seed used for deterministic rendering"
     )
+
+    parser.add_argument(
+        "--layer-mode",
+        choices=("layered", "legacy"),
+        default="layered",
+        help="Use independent outline/fill/texture layers or the previous renderer",
+    )
+    parser.add_argument(
+        "--outline-ratio",
+        type=float,
+        default=0.35,
+        help="Relative glyph budget assigned to the structural outline",
+    )
+    parser.add_argument(
+        "--fill-ratio",
+        type=float,
+        default=0.50,
+        help="Relative glyph budget assigned to the mass fill",
+    )
+    parser.add_argument(
+        "--texture-ratio",
+        type=float,
+        default=0.15,
+        help="Relative glyph budget assigned to the low-opacity texture overlay",
+    )
+    parser.add_argument(
+        "--outline-depth-max",
+        type=float,
+        default=0.18,
+        help="Maximum normalized depth eligible for the outline layer",
+    )
+    parser.add_argument(
+        "--fill-depth-min",
+        type=float,
+        default=0.035,
+        help="Minimum normalized depth eligible for the fill layer",
+    )
+    parser.add_argument(
+        "--texture-depth-min",
+        type=float,
+        default=0.20,
+        help="Minimum normalized depth eligible for the texture layer",
+    )
+
     parser.add_argument(
         "--edge-threshold",
         type=float,
@@ -72,44 +121,45 @@ def build_parser() -> argparse.ArgumentParser:
         "--edge-ratio",
         type=float,
         default=0.45,
-        help="Relative glyph budget assigned to the edge",
+        help="Legacy relative glyph budget assigned to the edge",
     )
     parser.add_argument(
         "--mid-ratio",
         type=float,
         default=0.35,
-        help="Relative glyph budget assigned to the middle zone",
+        help="Legacy relative glyph budget assigned to the middle zone",
     )
     parser.add_argument(
         "--core-ratio",
         type=float,
         default=0.20,
-        help="Relative glyph budget assigned to the core",
+        help="Legacy relative glyph budget assigned to the core",
     )
     parser.add_argument(
         "--cell-size",
         type=int,
         default=8,
-        help="Spatial occupancy grid cell size in mask pixels",
+        help="Legacy spatial occupancy grid cell size in mask pixels",
     )
     parser.add_argument(
         "--edge-capacity",
         type=int,
         default=4,
-        help="Maximum initial glyph occupancy per edge cell",
+        help="Legacy maximum initial glyph occupancy per edge cell",
     )
     parser.add_argument(
         "--mid-capacity",
         type=int,
         default=3,
-        help="Maximum initial glyph occupancy per middle cell",
+        help="Legacy maximum initial glyph occupancy per middle cell",
     )
     parser.add_argument(
         "--core-capacity",
         type=int,
         default=2,
-        help="Maximum initial glyph occupancy per core cell",
+        help="Legacy maximum initial glyph occupancy per core cell",
     )
+
     parser.add_argument(
         "--orientation-mode",
         choices=("tangent", "random"),
@@ -126,7 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--orientation-jitter",
         type=float,
         default=7.0,
-        help="Base organic jitter; edge uses less and core uses more",
+        help="Base organic jitter; layers and zones derive their own values",
     )
     parser.add_argument(
         "--edge-orientation-strength",
@@ -217,6 +267,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             min_confidence=args.orientation_min_confidence,
             confidence_power=args.orientation_confidence_power,
         )
+        layer_config = LayerConfig(
+            enabled=args.layer_mode == "layered",
+            outline_ratio=args.outline_ratio,
+            fill_ratio=args.fill_ratio,
+            texture_ratio=args.texture_ratio,
+            outline_depth_max=args.outline_depth_max,
+            fill_depth_min=args.fill_depth_min,
+            texture_depth_min=args.texture_depth_min,
+        )
     except (ValidationError, ValueError) as error:
         print("Erro de configuração:")
         print(error)
@@ -232,23 +291,28 @@ def main(argv: Sequence[str] | None = None) -> int:
             target_object.mask_path,
             orientation_smoothing=args.orientation_smoothing,
         )
-        scene_glyphs = distribute_glyphs(
-            object_id=target_object.id,
-            valid_coords=analysis.valid_coordinates,
-            character_sequence=target_object.character_sequence,
-            glyph_count=target_object.glyph_count,
-            font_size_range=target_object.font_size_range,
-            palette=target_object.palette,
-            seed=target_object.seed,
-            rotation_range=(args.rotation_min, args.rotation_max),
-            distribution_config=distribution_config,
-            orientation_field=(
-                analysis.tangent_field
-                if orientation_config.enabled
-                else None
+        common_arguments = {
+            "object_id": target_object.id,
+            "valid_coords": analysis.valid_coordinates,
+            "character_sequence": target_object.character_sequence,
+            "glyph_count": target_object.glyph_count,
+            "font_size_range": target_object.font_size_range,
+            "palette": target_object.palette,
+            "seed": target_object.seed,
+            "rotation_range": (args.rotation_min, args.rotation_max),
+            "distribution_config": distribution_config,
+            "orientation_field": (
+                analysis.tangent_field if orientation_config.enabled else None
             ),
-            orientation_config=orientation_config,
-        )
+            "orientation_config": orientation_config,
+        }
+        if layer_config.enabled:
+            scene_glyphs = distribute_layered_glyphs(
+                **common_arguments,
+                layer_config=layer_config,
+            )
+        else:
+            scene_glyphs = distribute_glyphs(**common_arguments)
     except (OSError, ValueError) as error:
         print(f"Erro durante a geração: {error}")
         return 2
@@ -269,6 +333,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _write_json(json_path, [glyph.model_dump() for glyph in scene_glyphs])
 
     zone_counts = Counter(glyph.zone for glyph in scene_glyphs)
+    layer_counts = Counter(glyph.layer for glyph in scene_glyphs)
     orientation_counts = Counter(
         glyph.orientation_source for glyph in scene_glyphs
     )
@@ -303,6 +368,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     report["zone_counts"] = {
         zone: zone_counts.get(zone, 0) for zone in ("edge", "mid", "core")
     }
+    report["layer_mode"] = args.layer_mode
+    report["layers"] = asdict(layer_config)
+    report["layer_counts"] = {
+        layer: layer_counts.get(layer, 0)
+        for layer in ("outline", "fill", "texture")
+    }
+    report["layer_metrics"] = summarize_layer_metrics(scene_glyphs)
     report["orientation"] = {
         **asdict(orientation_config),
         "mode": args.orientation_mode,
@@ -344,6 +416,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"edge={zone_counts.get('edge', 0)}, "
         f"mid={zone_counts.get('mid', 0)}, "
         f"core={zone_counts.get('core', 0)}"
+    )
+    print(
+        "Camadas: "
+        f"outline={layer_counts.get('outline', 0)}, "
+        f"fill={layer_counts.get('fill', 0)}, "
+        f"texture={layer_counts.get('texture', 0)}"
     )
     print(
         "Orientação: "
