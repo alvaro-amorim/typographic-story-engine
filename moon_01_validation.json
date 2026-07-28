@@ -1,0 +1,8 @@
+{
+  "is_valid": true,
+  "strict_mode_respected": true,
+  "semantic_characters_respected": true,
+  "invalid_glyphs_found": [],
+  "forbidden_tags_found": [],
+  "total_glyphs_rendered": 8000
+}
