@@ -1,51 +1,41 @@
 # Typographic Story Engine
 
-Motor experimental para reconstruir objetos usando apenas glyphs semanticamente permitidos. Um objeto `MOON`, por exemplo, só pode usar `M`, `O`, `O`, `N`; a repetição do `O` também influencia a frequência de amostragem.
+Motor experimental para reconstruir objetos usando somente letras semanticamente permitidas. Um objeto `MOON`, por exemplo, usa apenas `M`, `O`, `O`, `N`; letras repetidas continuam influenciando a frequência de amostragem.
 
-## Estado atual
+## Renderer v0.1
 
-O MVP recebe uma máscara raster e gera uma composição determinística em SVG estrito. O pipeline combina:
+A versão atual recebe uma máscara raster e gera uma composição determinística em SVG estrito. O pipeline combina:
 
 1. distância exata até a borda;
-2. distribuição espacial sem aglomeração excessiva;
-3. orientação adaptativa pela curvatura local;
+2. distribuição espacial controlada;
+3. orientação adaptativa pela curvatura;
 4. camadas tipográficas independentes;
-5. direção artística orgânica por subcamadas.
+5. papéis visuais para contorno, preenchimento e textura;
+6. validação semântica e estrutural.
 
 Cada glyph registra posição, tamanho, rotação, opacidade, cor, profundidade, zona, camada, papel visual e métricas de orientação.
 
-## Modo orgânico
+## Renderer oficial: `balanced`
 
-O modo padrão agora é `organic`. Ele mantém as três camadas principais, mas divide suas responsabilidades em quatro papéis visuais:
+O modo padrão combina o contorno orgânico com um preenchimento espacialmente controlado:
 
-- `outline_detail`: letras menores, mais precisas e fortemente orientadas para desenhar a silhueta final;
-- `outline_shadow`: faixa mais interna, maior e menos opaca, que dá profundidade sem criar um traço uniforme;
-- `fill_mass`: preenchimento com contraste e variação de tamanho maiores, mas orientação estrutural reduzida;
-- `texture_accent`: menos glyphs, opacidade perceptível e rotação livre para enriquecer o interior.
+- `outline_detail`: define a silhueta com letras pequenas e orientadas;
+- `outline_shadow`: cria profundidade com uma faixa interna mais suave;
+- `fill_mass`: preenche a forma sem clusters escuros;
+- `texture_accent`: acrescenta detalhe leve e distribuído.
 
-A divisão padrão para 8.000 glyphs é:
+Os renderers anteriores continuam disponíveis para comparação:
 
-- `outline`: 2.720 glyphs — 34%;
-- `fill`: 4.320 glyphs — 54%;
-- `texture`: 960 glyphs — 12%.
-
-Dentro do orçamento de contorno, 32% formam `outline_shadow` e 68% formam `outline_detail`.
-
-## Espessura orgânica
-
-O contorno não recebe mais a mesma densidade em toda a curva. Um campo determinístico de baixa frequência modula:
-
-- seleção de posições;
-- tamanho dos glyphs;
-- opacidade;
-- contraste da paleta;
-- presença relativa de sombra e detalhe.
-
-A mesma seed continua produzindo exatamente o mesmo resultado, mas a borda deixa de parecer uma faixa mecânica.
+```text
+balanced  # padrão de produção
+organic   # contorno e preenchimento com modulação orgânica mais forte
+layered   # outline, fill e texture independentes
+legacy    # distribuição por edge, mid e core
+```
 
 ## Estrutura do SVG
 
-O SVG continua usando somente `<text>` para a arte. Os glyphs são agrupados em:
+A arte visível é formada somente por `<text>`. Elementos `<g>` são usados exclusivamente para organização e transformação:
 
 ```text
 layer_texture
@@ -67,14 +57,7 @@ data-zone
 data-style-role
 ```
 
-Essa estrutura já permite animar subcamadas separadamente e manter correspondência entre glyphs em cenas futuras.
-
-## Artefatos gerados
-
-- SVG estrito composto apenas por `<text>` e grupos organizacionais;
-- JSON com o estado completo de cada glyph;
-- relatório de validação semântica e métricas por zona, camada e papel visual;
-- prévia PNG.
+Essa estrutura permite animar objetos e subcamadas sem converter a arte em formas geométricas.
 
 ## Instalação no Windows
 
@@ -97,78 +80,52 @@ O caminho deve terminar em:
 typographic-story-engine\venv\Scripts\python.exe
 ```
 
-## Testar o estilo orgânico
-
-```powershell
-git fetch origin
-git switch agent/organic-layer-styling
-git pull origin agent/organic-layer-styling
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
-```
-
-Gere a lua:
+## Gerar um objeto
 
 ```powershell
 python render_object_from_mask.py `
-  --id moon_organic `
+  --id moon_01 `
   --word MOON `
   --mask moon_mask.png `
   --count 8000 `
   --seed 817392 `
   --palette "#172033" "#344966" "#596773" "#8A795D" `
-  --output-dir outputs/moon-organic
+  --output-dir outputs/moon
 ```
 
-O terminal deve registrar aproximadamente:
+Como `balanced` é o padrão, não é necessário informar `--layer-mode`.
 
-```text
-Camadas: outline=2720, fill=4320, texture=960
-Papéis orgânicos: outline_shadow=870, outline_detail=1850, fill_mass=4320, texture_accent=960
-```
-
-## Comparar com o modo layered
+Para comparar outro renderer:
 
 ```powershell
-python render_object_from_mask.py `
-  --id moon_layered `
-  --word MOON `
-  --mask moon_mask.png `
-  --count 8000 `
-  --seed 817392 `
-  --layer-mode layered `
-  --palette "#172033" "#344966" "#596773" "#8A795D" `
-  --output-dir outputs/moon-layered-comparison
-```
-
-O modo `legacy` também permanece disponível:
-
-```powershell
+--layer-mode organic
+--layer-mode layered
 --layer-mode legacy
 ```
 
-## Controles orgânicos
+O comando antigo continua válido como wrapper de compatibilidade:
 
-- `--layer-mode organic|layered|legacy`: seleciona o renderer;
-- `--outline-ratio`, `--fill-ratio`, `--texture-ratio`: orçamento das camadas;
-- `--outline-shadow-fraction`: parcela do contorno usada pela sombra interna; padrão `0.32`;
-- `--outline-detail-depth-max`: largura da faixa de detalhe; padrão `0.105`;
-- `--outline-shadow-depth-min`: início da sombra interna; padrão `0.045`;
-- `--outline-depth-max`: limite interno total do contorno; padrão `0.18`;
-- `--organic-scale`: escala espacial da modulação; padrão `0.032`;
-- `--texture-opacity-min`: opacidade mínima da textura; padrão `0.20`;
-- `--texture-opacity-max`: opacidade máxima da textura; padrão `0.31`.
+```powershell
+python render_balanced_from_mask.py ...
+```
 
-As proporções são normalizadas automaticamente e sempre preservam o total exato de glyphs.
+## Artefatos gerados
 
-## Orientação por papel
+```text
+<id>_scene.svg
+<id>_scene.json
+<id>_validation.json
+<id>_preview.png
+```
 
-A orientação adaptativa continua dependente de zona, profundidade e confiança, mas cada papel recebe uma influência diferente:
+O relatório inclui:
 
-- `outline_detail`: força integral e jitter reduzido;
-- `outline_shadow`: 72% da força e jitter moderado;
-- `fill_mass`: 32% da força e maior liberdade;
-- `texture_accent`: orientação estrutural desativada, usando rotação orgânica.
+- versão e modo do renderer;
+- seed e sequência semântica;
+- contagem por zona, camada e papel;
+- métricas de orientação;
+- métricas de concentração local do renderer balanceado;
+- letras inválidas e tags proibidas.
 
 ## Validação
 
@@ -176,19 +133,27 @@ A orientação adaptativa continua dependente de zona, profundidade e confiança
 python -m pytest -q
 ```
 
-A suíte cobre:
+A suíte cobre determinismo, letras repetidas, ocupação espacial, orientação, camadas, papéis visuais, ausência de formas proibidas e leitura de máscaras.
 
-- determinismo por seed;
-- frequência de letras repetidas;
-- distribuição exata por zonas, camadas e papéis;
-- modulação orgânica estável e limitada;
-- profundidade correta de cada subcamada;
-- hierarquia de tamanho, opacidade e orientação;
-- ordem de pintura do SVG;
-- compatibilidade com glyphs antigos sem papel explícito;
-- ausência de formas proibidas;
-- leitura e validação de máscaras.
+## Próximo marco: end-to-end v0
 
-## Próximo marco
+O próximo objetivo é provar o produto completo com o menor caminho possível:
 
-Depois da validação visual do estilo orgânico, o próximo passo será compor vários objetos semânticos em uma única cena, mantendo um grupo independente para cada objeto e preparando a transição entre dois SVGs.
+```text
+história curta
+  → Scene Graph
+  → cena com vários objetos
+  → duas cenas persistentes
+  → animação por grupos SVG
+  → frames PNG
+  → MP4
+  → endpoint FastAPI
+```
+
+A primeira demonstração usará três objetos semânticos independentes:
+
+```text
+CAT + MOON + GROUND
+```
+
+Cada objeto terá máscara, palavra, seed, posição, escala, rotação e `z_index` próprios. O primeiro vídeo animará grupos inteiros; morphing individual de glyphs será desenvolvido somente depois que o pipeline completo estiver funcionando.
