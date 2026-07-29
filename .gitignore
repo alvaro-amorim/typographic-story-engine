@@ -1,0 +1,10 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+outputs/
+*_scene.svg
+*_scene.json
+*_validation.json
+*_preview.png
