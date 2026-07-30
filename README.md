@@ -2,17 +2,15 @@
 
 Motor local para transformar histórias curtas em cenas e vídeos compostos por letras semanticamente permitidas.
 
-Um objeto `MOON`, por exemplo, usa somente `M`, `O`, `O`, `N`. Um objeto `CAT` usa somente `C`, `A`, `T`. Cada objeto mantém sua própria regra mesmo quando vários deles aparecem na mesma cena.
+Um objeto `MOON` usa somente `M`, `O`, `O`, `N`. Um objeto `CAT` usa somente `C`, `A`, `T`. Cada objeto mantém sua regra mesmo quando vários deles aparecem na mesma cena.
 
-## Estado atual — end-to-end v0.2
-
-O projeto já executa o fluxo:
+## Estado atual — end-to-end v0.2.1
 
 ```text
 história curta
   → Asset Registry
-  → planejamento determinístico ou Ollama local
-  → dois Scene Graphs persistentes
+  → planner determinístico ou Ollama local
+  → Scene Graphs persistentes
   → composição multiobjeto
   → animação por grupos SVG
   → frames SVG/PNG
@@ -20,54 +18,22 @@ história curta
   → jobs pela FastAPI local
 ```
 
-O renderer individual continua sendo SVG estrito: toda arte visível é formada por `<text>`. Elementos `<g>` são usados somente para organização, transformação e animação.
+A arte final continua sendo SVG estrito: toda parte visível é `<text>`. Grupos `<g>` são usados somente para organização e transformação.
 
-## Principais módulos
+## Estrutura do repositório
 
-### Renderer `balanced`
+```text
+├── api_server/   # FastAPI e jobs locais
+├── assets/       # silhuetas aprovadas, metadados e licenças
+├── commands/     # CLIs oficiais executadas com python -m
+├── docs/         # documentação técnica
+├── engine/       # lógica reutilizável do produto
+├── examples/     # demonstrações reproduzíveis
+├── outputs/      # artefatos descartáveis; começa vazio
+└── tests/        # suíte automatizada
+```
 
-Recebe uma máscara raster e produz glyphs determinísticos com:
-
-- distância exata até a borda;
-- distribuição espacial controlada;
-- orientação pela curvatura;
-- camadas `outline`, `fill` e `texture`;
-- papéis `outline_detail`, `outline_shadow`, `fill_mass` e `texture_accent`;
-- validação semântica e estrutural.
-
-### Scene Composer
-
-Combina objetos já renderizados sem regenerar glyphs. Cada objeto possui:
-
-- ID persistente;
-- palavra semântica;
-- posição;
-- escala;
-- rotação;
-- opacidade;
-- visibilidade;
-- `z_index`.
-
-### Object Animation
-
-Interpola duas cenas que compartilham os mesmos objetos e glyphs:
-
-- `x` e `y`;
-- `scale_x` e `scale_y`;
-- rotação pelo caminho angular mais curto;
-- opacidade e fade;
-- easing;
-- duração e FPS.
-
-### Story Planner
-
-O planner determinístico entende aliases em inglês e português e gera duas cenas compatíveis.
-
-O provider Ollama é opcional e usa structured output com JSON Schema. O modelo escolhe somente assets existentes; ele não gera SVG nem coordenadas de glyphs. Em caso de erro, o sistema pode retornar ao planner determinístico.
-
-### FastAPI local
-
-A API oferece jobs em background, progresso, persistência local e download seguro de artefatos.
+Consulte `docs/PROJECT_STRUCTURE.md` antes de adicionar novos arquivos.
 
 ## Instalação no Windows
 
@@ -78,19 +44,73 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
 ```
 
-Confirme o ambiente:
+## Limpar todas as gerações anteriores
+
+`outputs/` não contém fonte do projeto. Para apagar todo o seu conteúdo local e começar uma nova rodada:
 
 ```powershell
-python -c "import sys; print(sys.executable)"
+python -m commands.clean_outputs
 ```
+
+O comando possui proteção para não apagar diretórios fora do repositório.
+
+## Biblioteca de silhuetas
+
+As referências visuais ficam em `assets/`. O demo não desenha mais um gato provisório com primitivas do Pillow.
+
+Assets iniciais:
+
+```text
+cat_standing_side_01
+cat_sitting_side_01
+cat_walking_side_01
+moon_crescent_01
+ground_hill_01
+```
+
+Cada asset possui:
+
+- `source.svg` preto e branco;
+- `metadata.json` com autoria e licença;
+- entrada em `assets/catalog.json`;
+- anchors normalizados para uso futuro em articulação.
+
+Construa as máscaras PNG derivadas:
+
+```powershell
+python -m commands.build_assets
+```
+
+Saída:
+
+```text
+outputs/_asset_cache/<category>/<subject>/<asset-id>/mask.png
+```
+
+As máscaras derivadas não são versionadas; podem ser reconstruídas a qualquer momento.
+
+## Comandos oficiais
+
+```powershell
+python -m commands.render_object --help
+python -m commands.render_scene --help
+python -m commands.animate --help
+python -m commands.export_video --help
+python -m commands.plan_story --help
+python -m commands.run_api --help
+python -m commands.build_assets --help
+python -m commands.clean_outputs --help
+```
+
+Os scripts antigos da raiz permanecem temporariamente como compatibilidade, mas novas instruções devem usar `commands/`.
 
 ## Gerar um objeto
 
 ```powershell
-python render_object_from_mask.py `
+python -m commands.render_object `
   --id moon_01 `
   --word MOON `
-  --mask moon_mask.png `
+  --mask outputs/_asset_cache/environment/moon/moon_crescent_01/mask.png `
   --count 8000 `
   --seed 817392 `
   --palette "#172033" "#344966" "#596773" "#8A795D" `
@@ -99,53 +119,29 @@ python render_object_from_mask.py `
 
 O renderer `balanced` é o padrão. Os modos `organic`, `layered` e `legacy` continuam disponíveis para comparação.
 
-## Primeiro demo multiobjeto
+## Demo multiobjeto com assets aprovados
 
 ```powershell
-python -m examples.build_cat_moon_ground_demo
+python -m examples.build_cat_moon_ground_demo --clean
 ```
 
-Cena:
+A cena usa:
 
 ```text
 CAT + MOON + GROUND
 ```
 
-## Gerar frames de animação
+Para trocar a pose do gato:
 
 ```powershell
-python -m examples.build_cat_walk_animation_demo `
-  --duration 1 `
-  --fps 4 `
-  --skip-png
+python -m examples.build_cat_moon_ground_demo `
+  --clean `
+  --cat-asset cat_sitting_side_01
 ```
 
-## Gerar o primeiro MP4
+O demo grava `asset_provenance.json`, relacionando cada objeto ao asset de referência utilizado.
 
-Requer FFmpeg disponível no `PATH`:
-
-```powershell
-ffmpeg -version
-```
-
-Depois:
-
-```powershell
-python -m examples.build_cat_walk_video_demo `
-  --duration 1 `
-  --fps 6 `
-  --preset fast
-```
-
-Saída:
-
-```text
-outputs/demo-cat-walk-video/cat_walk_01.mp4
-```
-
-## História para vídeo
-
-Sem FFmpeg:
+## História para frames
 
 ```powershell
 python -m examples.build_story_video_demo `
@@ -155,7 +151,15 @@ python -m examples.build_story_video_demo `
   --skip-video
 ```
 
-Com MP4:
+## História para MP4
+
+Requer FFmpeg no `PATH`:
+
+```powershell
+ffmpeg -version
+```
+
+Depois:
 
 ```powershell
 python -m examples.build_story_video_demo `
@@ -165,7 +169,7 @@ python -m examples.build_story_video_demo `
   --preset fast
 ```
 
-## Usar Ollama local
+## Planner com Ollama local
 
 ```powershell
 ollama pull qwen3:4b
@@ -179,21 +183,21 @@ python -m examples.build_story_video_demo `
   --skip-video
 ```
 
-O fallback determinístico é ativado por padrão. Use `--no-fallback` para testar exclusivamente o modelo.
+O modelo seleciona apenas assets existentes. Ele não cria silhuetas, SVGs ou glyphs arbitrários. O fallback determinístico permanece ativado por padrão.
 
-## Executar a API
+## API local
 
 ```powershell
-python run_api.py --reload
+python -m commands.run_api --reload
 ```
 
-OpenAPI e interface interativa:
+Documentação interativa:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-Endpoints:
+Endpoints principais:
 
 ```text
 GET  /health
@@ -204,69 +208,30 @@ GET  /v1/jobs/{job_id}/artifacts
 GET  /v1/jobs/{job_id}/artifacts/{artifact_path}
 ```
 
-## Estrutura dos artefatos
-
-```text
-plans/
-  <story>_plan.json
-  <story>_scene_001.json
-  <story>_scene_002.json
-  <story>_animation.json
-animation/
-  <transition>/
-    <transition>_manifest.json
-    <transition>_validation.json
-    frames/svg/
-    frames/png/
-<story>.mp4
-```
-
 ## Validação
 
 ```powershell
 python -m pytest -q
 ```
 
-A suíte cobre:
-
-- determinismo e letras repetidas;
-- distribuição, curvatura e camadas;
-- SVG sem formas visíveis proibidas;
-- semântica separada por objeto;
-- Scene Graph e `z_index`;
-- persistência dos glyphs entre frames;
-- easing e interpolação;
-- exportação FFmpeg simulada no CI;
-- Asset Registry e planner;
-- structured output do Ollama;
-- fallback determinístico;
-- pipeline completo;
-- jobs e artefatos da FastAPI.
-
-O CI executa a suíte no Windows com Python 3.12 e 3.14.
+O CI executa a suíte no Windows com Python 3.12 e Python 3.14.
 
 ## Documentação técnica
 
+- `docs/PROJECT_STRUCTURE.md`
 - `docs/SCENE_COMPOSER.md`
 - `docs/OBJECT_ANIMATION.md`
 - `docs/VIDEO_EXPORT.md`
 - `docs/STORY_PLANNER.md`
 - `docs/OLLAMA_PLANNER.md`
 - `docs/LOCAL_API.md`
-
-## Limites atuais
-
-- o Asset Registry de demonstração ainda possui poucos objetos;
-- a animação move grupos completos, não glyphs individuais;
-- o planner produz duas cenas por história;
-- `BackgroundTasks` é adequado ao MVP local, não a uma fila distribuída;
-- FFmpeg e Ollama são dependências externas opcionais.
+- `assets/README.md`
 
 ## Próximos marcos
 
-1. ampliar o catálogo de personagens, poses e cenários;
-2. suportar histórias com várias cenas e transições;
-3. adicionar matching e morphing individual de glyphs;
-4. criar uma fila de workers para produção;
-5. adicionar armazenamento persistente e autenticação à API;
-6. criar editor visual e interface web.
+1. validar visualmente as novas silhuetas aprovadas;
+2. associar poses e anchors ao Asset Registry narrativo;
+3. criar personagens compostos por partes semânticas;
+4. implementar movimentos `idle`, `look_at`, `turn` e `walk`;
+5. evoluir de duas cenas para uma timeline arbitrária;
+6. adicionar morphing individual de glyphs.
