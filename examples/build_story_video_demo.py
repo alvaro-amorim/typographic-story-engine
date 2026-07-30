@@ -27,6 +27,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--duration", type=float, default=2.0)
     parser.add_argument("--fps", type=int, default=12)
+    parser.add_argument(
+        "--provider",
+        choices=("deterministic", "ollama"),
+        default="deterministic",
+    )
+    parser.add_argument("--ollama-model", default=None)
+    parser.add_argument("--ollama-url", default="http://localhost:11434")
+    parser.add_argument("--ollama-timeout", type=float, default=60.0)
+    parser.add_argument("--no-fallback", action="store_true")
     parser.add_argument("--ffmpeg", default=None)
     parser.add_argument("--crf", type=int, default=18)
     parser.add_argument("--preset", default="medium")
@@ -121,22 +130,37 @@ def main(argv: Sequence[str] | None = None) -> int:
         return assets_result
 
     registry_path = _write_registry(root)
-    plan_result = plan_story_main(
-        [
-            "--story",
-            args.story,
-            "--registry",
-            str(registry_path),
-            "--id",
-            args.id,
-            "--duration",
-            str(args.duration),
-            "--fps",
-            str(args.fps),
-            "--output-dir",
-            str(root / "plans"),
-        ]
-    )
+    plan_arguments = [
+        "--story",
+        args.story,
+        "--registry",
+        str(registry_path),
+        "--id",
+        args.id,
+        "--duration",
+        str(args.duration),
+        "--fps",
+        str(args.fps),
+        "--provider",
+        args.provider,
+        "--output-dir",
+        str(root / "plans"),
+    ]
+    if args.provider == "ollama":
+        if args.ollama_model:
+            plan_arguments.extend(["--ollama-model", args.ollama_model])
+        plan_arguments.extend(
+            [
+                "--ollama-url",
+                args.ollama_url,
+                "--ollama-timeout",
+                str(args.ollama_timeout),
+            ]
+        )
+    if args.no_fallback:
+        plan_arguments.append("--no-fallback")
+
+    plan_result = plan_story_main(plan_arguments)
     if plan_result != 0:
         return plan_result
 
