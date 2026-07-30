@@ -3,3 +3,5 @@ numpy
 scipy
 pydantic>=2
 PyMuPDF
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
