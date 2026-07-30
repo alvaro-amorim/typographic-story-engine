@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Crescent moon silhouette</title>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <path fill="#000000" d="M360 63 C237 79 145 183 145 307 C145 390 189 463 255 504 C124 479 28 364 28 227 C28 91 138 -19 274 -19 C307 -19 338 -13 367 -2 C327 18 292 47 266 84 C294 70 325 63 360 63 Z"/>
+</svg>
