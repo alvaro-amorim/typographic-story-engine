@@ -1,5 +1,22 @@
 {
-  "version": "0.2.1",
+  "version": "0.2.2",
+  "defaults": {
+    "cat.contemplative": "cat_sitting_side_01",
+    "cat.locomotion": "cat_walking_side_01",
+    "cat.neutral": "cat_standing_side_01",
+    "environment.moon": "moon_crescent_01",
+    "environment.ground": "ground_hill_01"
+  },
+  "pose_sequences": [
+    {
+      "id": "cat_sitting_to_walking_01",
+      "subject": "cat",
+      "from_asset": "cat_sitting_side_01",
+      "to_asset": "cat_walking_side_01",
+      "intent": "leave_scene",
+      "status": "planned"
+    }
+  ],
   "assets": [
     {
       "id": "cat_standing_side_01",
@@ -8,6 +25,8 @@
       "subject": "cat",
       "pose": "standing",
       "view": "side",
+      "status": "secondary",
+      "roles": ["neutral", "auxiliary"],
       "source_svg": "silhouettes/characters/cat/cat_standing_side_01/source.svg",
       "mask_width": 512,
       "mask_height": 512,
@@ -32,6 +51,8 @@
       "subject": "cat",
       "pose": "sitting",
       "view": "side",
+      "status": "primary",
+      "roles": ["contemplative", "default-scene", "story-opening"],
       "source_svg": "silhouettes/characters/cat/cat_sitting_side_01/source.svg",
       "mask_width": 512,
       "mask_height": 512,
@@ -56,6 +77,8 @@
       "subject": "cat",
       "pose": "walking",
       "view": "side",
+      "status": "primary",
+      "roles": ["locomotion", "default-motion", "story-exit"],
       "source_svg": "silhouettes/characters/cat/cat_walking_side_01/source.svg",
       "mask_width": 512,
       "mask_height": 512,
@@ -80,6 +103,8 @@
       "subject": "moon",
       "pose": "crescent",
       "view": "front",
+      "status": "primary",
+      "roles": ["night-background", "default-scene"],
       "source_svg": "silhouettes/environments/moon/moon_crescent_01/source.svg",
       "mask_width": 512,
       "mask_height": 512,
@@ -102,6 +127,8 @@
       "subject": "ground",
       "pose": "gentle-hill",
       "view": "side",
+      "status": "primary",
+      "roles": ["ground", "default-scene"],
       "source_svg": "silhouettes/environments/ground/ground_hill_01/source.svg",
       "mask_width": 1024,
       "mask_height": 256,
