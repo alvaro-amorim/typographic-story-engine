@@ -63,17 +63,13 @@ def _contains_phrase(normalized_story: str, phrases: tuple[str, ...]) -> bool:
 def _subject_candidates(registry: AssetRegistry, normalized_story: str) -> list[AssetSpec]:
     tagged = [asset for asset in registry.assets if "subject" in asset.tags]
     matched = [asset for asset in tagged if asset.matches(normalized_story)]
-    if matched:
-        return sorted(
-            matched,
-            key=lambda asset: (
-                -max((len(alias) for alias in asset.aliases), default=0),
-                asset.id,
-            ),
-        )
-    if len(tagged) == 1:
-        return tagged
-    return []
+    return sorted(
+        matched,
+        key=lambda asset: (
+            -max((len(alias) for alias in asset.aliases), default=0),
+            asset.id,
+        ),
+    )
 
 
 def _movement_direction(normalized_story: str) -> MovementDirection:
