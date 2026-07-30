@@ -8,7 +8,12 @@ from pathlib import Path
 from engine.animation_models import SceneAnimationSpec
 from engine.asset_registry import AssetRegistry, AssetSpec, normalize_story_text
 from engine.scene_models import SceneObjectSpec, SceneSpec, SceneTransform
-from engine.story_models import MovementDirection, StoryPlanManifest, StoryPlanOutput
+from engine.story_models import (
+    MovementDirection,
+    StoryDecision,
+    StoryPlanManifest,
+    StoryPlanOutput,
+)
 
 _LEFT_PHRASES = (
     "walks left",
@@ -82,85 +87,12 @@ def _movement_direction(normalized_story: str) -> MovementDirection:
     return "pose"
 
 
-def _story_id(story: str, explicit: str | None) -> str:
-    if explicit is not None:
-        normalized = explicit.strip()
-        if not normalized or any(character.isspace() for character in normalized):
-            raise ValueError("story id cannot be blank or contain whitespace")
-        return normalized
-    digest = hashlib.sha256(story.encode("utf-8")).hexdigest()[:10]
-    return f"story_{digest}"
-
-
-def _included_assets(
-    registry: AssetRegistry,
-    subject: AssetSpec,
-    normalized_story: str,
-) -> list[AssetSpec]:
-    included = [
-        asset
-        for asset in registry.assets
-        if asset.id == subject.id
-        or asset.always_include
-        or asset.matches(normalized_story)
-    ]
-    unique = {asset.id: asset for asset in included}
-    return sorted(unique.values(), key=lambda asset: (asset.z_index, asset.id))
-
-
-def _scene_object(asset: AssetSpec, transform: SceneTransform) -> SceneObjectSpec:
-    if not asset.glyphs_path.is_file():
-        raise ValueError(f"glyph-state file was not found for asset '{asset.id}': {asset.glyphs_path}")
-    return SceneObjectSpec(
-        id=asset.id,
-        word=asset.word,
-        glyphs_path=asset.glyphs_path.resolve(),
-        transform=transform,
-        z_index=asset.z_index,
-        visible=asset.visible,
-    )
-
-
-def _end_subject_transform(
-    start: SceneTransform,
-    *,
-    direction: MovementDirection,
-    movement_distance: float,
-    canvas_height: int,
-    normalized_story: str,
-) -> SceneTransform:
-    if direction == "pose":
-        return start.model_copy(
-            update={
-                "rotation": start.rotation - 3.0,
-            }
-        )
-
-    sign = -1.0 if direction == "left" else 1.0
-    away = _contains_phrase(normalized_story, _AWAY_PHRASES)
-    scale_factor = 0.94 if away else 1.0
-    return start.model_copy(
-        update={
-            "x": start.x + sign * movement_distance,
-            "y": start.y + canvas_height * 0.012,
-            "scale_x": start.scale_x * scale_factor,
-            "scale_y": start.scale_y * scale_factor,
-            "rotation": start.rotation + (-4.0 if direction == "right" else 4.0),
-        }
-    )
-
-
-def plan_story(
+def deterministic_story_decision(
     story: str,
     registry: AssetRegistry,
     *,
-    story_id: str | None = None,
-    duration_seconds: float = 2.0,
-    fps: int = 12,
-    easing: str = "ease_in_out",
     movement_fraction: float = 0.28,
-    registry_file: str = "",
-) -> PlannedStoryBundle:
+) -> StoryDecision:
     normalized_story = normalize_story_text(story)
     if not normalized_story:
         raise ValueError("story cannot be blank")
@@ -183,9 +115,126 @@ def plan_story(
         )
 
     subject = candidates[0]
-    included = _included_assets(registry, subject, normalized_story)
-    direction = _movement_direction(normalized_story)
-    movement_distance = registry.width * movement_fraction if direction != "pose" else 0.0
+    included = [
+        asset
+        for asset in registry.assets
+        if asset.id == subject.id
+        or asset.always_include
+        or asset.matches(normalized_story)
+    ]
+    included.sort(key=lambda asset: (asset.z_index, asset.id))
+    return StoryDecision(
+        subject_asset_id=subject.id,
+        included_asset_ids=[asset.id for asset in included],
+        movement_direction=_movement_direction(normalized_story),
+        movement_fraction=movement_fraction,
+    )
+
+
+def _story_id(story: str, explicit: str | None) -> str:
+    if explicit is not None:
+        normalized = explicit.strip()
+        if not normalized or any(character.isspace() for character in normalized):
+            raise ValueError("story id cannot be blank or contain whitespace")
+        return normalized
+    digest = hashlib.sha256(story.encode("utf-8")).hexdigest()[:10]
+    return f"story_{digest}"
+
+
+def _validated_decision_assets(
+    registry: AssetRegistry,
+    decision: StoryDecision,
+) -> tuple[AssetSpec, list[AssetSpec]]:
+    assets_by_id = registry.by_id()
+    unknown = sorted(
+        {
+            asset_id
+            for asset_id in [decision.subject_asset_id, *decision.included_asset_ids]
+            if asset_id not in assets_by_id
+        }
+    )
+    if unknown:
+        raise ValueError("story decision references unknown assets: " + ", ".join(unknown))
+
+    subject = assets_by_id[decision.subject_asset_id]
+    if "subject" not in subject.tags:
+        raise ValueError(
+            f"story decision subject '{subject.id}' is not tagged as a subject"
+        )
+
+    included_ids = set(decision.included_asset_ids)
+    included_ids.add(subject.id)
+    included_ids.update(asset.id for asset in registry.assets if asset.always_include)
+    included = [assets_by_id[asset_id] for asset_id in included_ids]
+    included.sort(key=lambda asset: (asset.z_index, asset.id))
+    return subject, included
+
+
+def _scene_object(asset: AssetSpec, transform: SceneTransform) -> SceneObjectSpec:
+    if not asset.glyphs_path.is_file():
+        raise ValueError(
+            f"glyph-state file was not found for asset '{asset.id}': {asset.glyphs_path}"
+        )
+    return SceneObjectSpec(
+        id=asset.id,
+        word=asset.word,
+        glyphs_path=asset.glyphs_path.resolve(),
+        transform=transform,
+        z_index=asset.z_index,
+        visible=asset.visible,
+    )
+
+
+def _end_subject_transform(
+    start: SceneTransform,
+    *,
+    direction: MovementDirection,
+    movement_distance: float,
+    canvas_height: int,
+    normalized_story: str,
+) -> SceneTransform:
+    if direction == "pose":
+        return start.model_copy(update={"rotation": start.rotation - 3.0})
+
+    sign = -1.0 if direction == "left" else 1.0
+    away = _contains_phrase(normalized_story, _AWAY_PHRASES)
+    scale_factor = 0.94 if away else 1.0
+    return start.model_copy(
+        update={
+            "x": start.x + sign * movement_distance,
+            "y": start.y + canvas_height * 0.012,
+            "scale_x": start.scale_x * scale_factor,
+            "scale_y": start.scale_y * scale_factor,
+            "rotation": start.rotation + (-4.0 if direction == "right" else 4.0),
+        }
+    )
+
+
+def plan_story_from_decision(
+    story: str,
+    registry: AssetRegistry,
+    decision: StoryDecision,
+    *,
+    story_id: str | None = None,
+    duration_seconds: float = 2.0,
+    fps: int = 12,
+    easing: str = "ease_in_out",
+    registry_file: str = "",
+    planner_provider: str = "deterministic",
+    planner_model: str | None = None,
+    planner_fallback_used: bool = False,
+    planner_error: str | None = None,
+) -> PlannedStoryBundle:
+    normalized_story = normalize_story_text(story)
+    if not normalized_story:
+        raise ValueError("story cannot be blank")
+
+    subject, included = _validated_decision_assets(registry, decision)
+    movement_distance = (
+        registry.width * decision.movement_fraction
+        if decision.movement_direction != "pose"
+        else 0.0
+    )
     identifier = _story_id(story, story_id)
 
     first_objects = [
@@ -197,7 +246,7 @@ def plan_story(
         if asset.id == subject.id:
             transform = _end_subject_transform(
                 transform,
-                direction=direction,
+                direction=decision.movement_direction,
                 movement_distance=movement_distance,
                 canvas_height=registry.height,
                 normalized_story=normalized_story,
@@ -233,20 +282,52 @@ def plan_story(
         id=identifier,
         story=story,
         normalized_story=normalized_story,
-        template_id=f"two_scene_subject_{direction}",
+        template_id=f"two_scene_subject_{decision.movement_direction}",
         subject_asset_id=subject.id,
         included_asset_ids=[asset.id for asset in included],
-        movement_direction=direction,
+        movement_direction=decision.movement_direction,
         movement_distance=movement_distance,
         scene_files=[first_name, second_name],
         animation_file=animation_name,
         registry_file=registry_file,
+        planner_provider=planner_provider,
+        planner_model=planner_model,
+        planner_fallback_used=planner_fallback_used,
+        planner_error=planner_error,
     )
     return PlannedStoryBundle(
         manifest=manifest,
         first_scene=first_scene,
         second_scene=second_scene,
         animation=animation,
+    )
+
+
+def plan_story(
+    story: str,
+    registry: AssetRegistry,
+    *,
+    story_id: str | None = None,
+    duration_seconds: float = 2.0,
+    fps: int = 12,
+    easing: str = "ease_in_out",
+    movement_fraction: float = 0.28,
+    registry_file: str = "",
+) -> PlannedStoryBundle:
+    decision = deterministic_story_decision(
+        story,
+        registry,
+        movement_fraction=movement_fraction,
+    )
+    return plan_story_from_decision(
+        story,
+        registry,
+        decision,
+        story_id=story_id,
+        duration_seconds=duration_seconds,
+        fps=fps,
+        easing=easing,
+        registry_file=registry_file,
     )
 
 
