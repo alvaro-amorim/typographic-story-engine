@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import dataclass
 from html import escape
 from pathlib import Path
@@ -248,12 +249,9 @@ def validate_composed_scene(
             "z_index": loaded.spec.z_index,
         }
 
+    id_counts = Counter(all_glyph_ids)
     duplicate_glyph_ids = sorted(
-        {
-            identifier
-            for identifier in all_glyph_ids
-            if all_glyph_ids.count(identifier) > 1
-        }
+        identifier for identifier, count in id_counts.items() if count > 1
     )
     svg_lower = svg_output.lower()
     forbidden_tags = [tag for tag in FORBIDDEN_VISIBLE_TAGS if tag in svg_lower]
