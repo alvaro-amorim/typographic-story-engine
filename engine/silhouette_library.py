@@ -7,9 +7,11 @@ from xml.etree import ElementTree
 
 import fitz  # PyMuPDF
 from PIL import Image
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 AssetCategory = Literal["character", "environment", "object"]
+AssetStatus = Literal["primary", "secondary", "candidate"]
+PoseSequenceStatus = Literal["planned", "ready", "deprecated"]
 
 _ALLOWED_SVG_TAGS = {
     "svg",
@@ -50,6 +52,8 @@ class SilhouetteAsset(BaseModel):
     subject: str
     pose: str
     view: str
+    status: AssetStatus = "candidate"
+    roles: list[str] = Field(default_factory=list)
     source_svg: Path
     mask_width: int = Field(default=512, ge=32, le=4096)
     mask_height: int = Field(default=512, ge=32, le=4096)
@@ -65,6 +69,16 @@ class SilhouetteAsset(BaseModel):
             raise ValueError("word must contain at least one non-whitespace character")
         return normalized
 
+    @field_validator("roles")
+    @classmethod
+    def validate_roles(cls, value: list[str]) -> list[str]:
+        normalized = [role.strip() for role in value]
+        if any(not role for role in normalized):
+            raise ValueError("asset roles cannot be blank")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("asset roles must be unique")
+        return normalized
+
     @field_validator("anchors")
     @classmethod
     def validate_anchors(
@@ -78,8 +92,19 @@ class SilhouetteAsset(BaseModel):
         return value
 
 
+class PoseSequenceSpec(BaseModel):
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    subject: str
+    from_asset: str
+    to_asset: str
+    intent: str
+    status: PoseSequenceStatus = "planned"
+
+
 class SilhouetteCatalog(BaseModel):
     version: str
+    defaults: dict[str, str] = Field(default_factory=dict)
+    pose_sequences: list[PoseSequenceSpec] = Field(default_factory=list)
     assets: list[SilhouetteAsset]
 
     @field_validator("assets")
@@ -90,12 +115,60 @@ class SilhouetteCatalog(BaseModel):
             raise ValueError("silhouette asset IDs must be unique")
         return value
 
+    @model_validator(mode="after")
+    def validate_catalog_references(self) -> "SilhouetteCatalog":
+        assets_by_id = {asset.id: asset for asset in self.assets}
+
+        for role, asset_id in self.defaults.items():
+            if not role.strip():
+                raise ValueError("default asset role cannot be blank")
+            if asset_id not in assets_by_id:
+                raise ValueError(
+                    f"default asset role '{role}' references unknown asset '{asset_id}'"
+                )
+
+        sequence_ids = [sequence.id for sequence in self.pose_sequences]
+        if len(sequence_ids) != len(set(sequence_ids)):
+            raise ValueError("pose sequence IDs must be unique")
+
+        for sequence in self.pose_sequences:
+            if sequence.from_asset == sequence.to_asset:
+                raise ValueError("pose sequence must use two different assets")
+            try:
+                source = assets_by_id[sequence.from_asset]
+                destination = assets_by_id[sequence.to_asset]
+            except KeyError as error:
+                raise ValueError(
+                    f"pose sequence '{sequence.id}' references unknown asset '{error.args[0]}'"
+                ) from error
+            if source.subject != sequence.subject or destination.subject != sequence.subject:
+                raise ValueError(
+                    f"pose sequence '{sequence.id}' assets must belong to subject '{sequence.subject}'"
+                )
+
+        return self
+
     def get(self, asset_id: str) -> SilhouetteAsset:
         for asset in self.assets:
             if asset.id == asset_id:
                 return asset
         available = ", ".join(sorted(asset.id for asset in self.assets))
         raise KeyError(f"unknown silhouette asset '{asset_id}'; available: {available}")
+
+    def get_default(self, role: str) -> SilhouetteAsset:
+        try:
+            asset_id = self.defaults[role]
+        except KeyError as error:
+            available = ", ".join(sorted(self.defaults))
+            raise KeyError(f"unknown default role '{role}'; available: {available}") from error
+        return self.get(asset_id)
+
+    def get_pose_sequence(self, sequence_id: str) -> PoseSequenceSpec:
+        for sequence in self.pose_sequences:
+            if sequence.id == sequence_id:
+                return sequence
+        available = ", ".join(sorted(sequence.id for sequence in self.pose_sequences))
+        raise KeyError(f"unknown pose sequence '{sequence_id}'; available: {available}")
 
 
 def load_silhouette_catalog(path: str | Path) -> SilhouetteCatalog:
