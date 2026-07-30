@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Walking cat side silhouette</title>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g fill="#000000" stroke="#000000">
+    <ellipse cx="262" cy="286" rx="145" ry="69" stroke="none"/>
+    <ellipse cx="403" cy="234" rx="56" ry="50" stroke="none"/>
+    <polygon points="369,205 377,142 407,192" stroke="none"/>
+    <polygon points="411,191 451,147 443,213" stroke="none"/>
+    <path d="M160 319 C150 344 138 378 115 414 C108 425 112 439 128 444 C145 449 158 441 166 426 C186 389 197 354 203 326 Z" stroke="none"/>
+    <path d="M225 330 C224 362 231 398 250 431 C258 445 273 450 288 443 C302 436 304 422 296 409 C278 379 270 348 272 321 Z" stroke="none"/>
+    <path d="M313 322 C324 348 339 377 365 405 C376 417 390 419 403 409 C416 399 414 384 403 374 C378 351 364 329 352 306 Z" stroke="none"/>
+    <ellipse cx="135" cy="441" rx="26" ry="10" stroke="none"/>
+    <ellipse cx="272" cy="442" rx="25" ry="10" stroke="none"/>
+    <ellipse cx="388" cy="409" rx="24" ry="10" stroke="none"/>
+    <path d="M126 278 C82 267 52 237 43 201 C36 171 46 143 67 126 C89 109 116 116 127 137 C137 157 128 177 110 184 C95 190 81 183 74 171" fill="none" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M351 258 C370 275 393 283 420 280 C440 278 454 268 461 253 C457 283 437 301 407 305 C382 308 357 300 336 282 Z" stroke="none"/>
+  </g>
+</svg>

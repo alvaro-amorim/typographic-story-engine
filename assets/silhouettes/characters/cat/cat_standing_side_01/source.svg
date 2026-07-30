@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Standing cat side silhouette</title>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <g fill="#000000" stroke="#000000">
+    <ellipse cx="264" cy="296" rx="142" ry="76" stroke="none"/>
+    <ellipse cx="399" cy="248" rx="57" ry="53" stroke="none"/>
+    <polygon points="366,216 370,146 407,204" stroke="none"/>
+    <polygon points="407,205 449,151 440,222" stroke="none"/>
+    <path d="M151 322 C140 354 137 394 146 438 L188 438 C183 395 185 357 199 329 Z" stroke="none"/>
+    <path d="M302 329 C309 362 309 399 300 438 L344 438 C354 392 352 351 339 318 Z" stroke="none"/>
+    <ellipse cx="166" cy="439" rx="27" ry="12" stroke="none"/>
+    <ellipse cx="322" cy="439" rx="28" ry="12" stroke="none"/>
+    <path d="M131 289 C88 279 61 248 54 212 C48 179 60 147 84 132 C105 119 128 128 135 147 C142 166 131 184 114 188 C102 191 92 186 86 177" fill="none" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M352 274 C370 290 388 303 414 307 C431 309 446 303 454 290 C448 320 426 337 395 336 C371 335 349 325 330 309 Z" stroke="none"/>
+  </g>
+</svg>
