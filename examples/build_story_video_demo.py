@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("outputs/demo-story-video"),
     )
+    parser.add_argument(
+        "--cat-asset",
+        default="cat_walking_side_01",
+        help="Approved cat silhouette. The walking pose is the motion-story default.",
+    )
     parser.add_argument("--duration", type=float, default=2.0)
     parser.add_argument("--fps", type=int, default=12)
     parser.add_argument(
@@ -47,7 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _write_registry(root: Path) -> Path:
+def _write_registry(root: Path, cat_asset: str) -> Path:
     registry = {
         "id": "cat_moon_ground_demo",
         "width": 1280,
@@ -84,8 +89,8 @@ def _write_registry(root: Path) -> Path:
                 "transform": {
                     "x": -15,
                     "y": 565,
-                    "scale_x": 1.82,
-                    "scale_y": 1.05,
+                    "scale_x": 1.25,
+                    "scale_y": 0.60,
                 },
             },
             {
@@ -95,14 +100,14 @@ def _write_registry(root: Path) -> Path:
                     (root / "objects" / "cat" / "cat_01_scene.json").resolve()
                 ),
                 "aliases": ["cat", "gato"],
-                "tags": ["subject", "animal"],
+                "tags": ["subject", "animal", "approved-pose", cat_asset],
                 "z_index": 3,
                 "transform": {
-                    "x": 390,
-                    "y": 255,
-                    "scale_x": 0.88,
-                    "scale_y": 0.88,
-                    "rotation": 2,
+                    "x": 360,
+                    "y": 215,
+                    "scale_x": 0.72,
+                    "scale_y": 0.72,
+                    "rotation": 0,
                 },
             },
         ],
@@ -123,13 +128,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         [
             "--output-dir",
             str(root),
+            "--cat-asset",
+            args.cat_asset,
             "--skip-png",
         ]
     )
     if assets_result != 0:
         return assets_result
 
-    registry_path = _write_registry(root)
+    registry_path = _write_registry(root, args.cat_asset)
     plan_arguments = [
         "--story",
         args.story,
