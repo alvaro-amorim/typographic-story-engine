@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Sequence
 
@@ -30,13 +31,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("Erro: --port deve estar entre 1 e 65535")
         return 2
 
-    app = create_app(output_root=args.output_dir)
-    uvicorn.run(
-        app,
-        host=args.host,
-        port=args.port,
-        reload=args.reload,
-    )
+    if args.reload:
+        os.environ["TSE_API_OUTPUT_ROOT"] = str(args.output_dir.resolve())
+        uvicorn.run(
+            "api_server.app:app",
+            host=args.host,
+            port=args.port,
+            reload=True,
+        )
+    else:
+        app = create_app(output_root=args.output_dir)
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+        )
     return 0
 
 
