@@ -54,7 +54,7 @@ def test_build_command_uses_h264_even_dimensions_and_faststart(tmp_path: Path) -
     )
 
     assert command[0] == "ffmpeg"
-    assert "frame_%04d.png" in command
+    assert any(str(item).endswith("frame_%04d.png") for item in command)
     assert "libx264" in command
     assert "pad=ceil(iw/2)*2:ceil(ih/2)*2" in command
     assert "yuv420p" in command
