@@ -25,7 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("assets/catalog.json"),
     )
-    parser.add_argument("--cat-asset", default="cat_standing_side_01")
+    parser.add_argument(
+        "--cat-asset",
+        default="cat_sitting_side_01",
+        help="Approved cat silhouette. The contemplative sitting pose is the scene default.",
+    )
     parser.add_argument("--moon-asset", default="moon_crescent_01")
     parser.add_argument("--ground-asset", default="ground_hill_01")
     parser.add_argument("--clean", action="store_true")
