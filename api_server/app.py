@@ -42,7 +42,7 @@ def _run_job(
     try:
         result = runner(request, store.artifacts_root(job_id), progress)
         store.complete(job_id, result)
-    except BaseException as error:
+    except Exception as error:
         store.fail(job_id, error)
 
 
