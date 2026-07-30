@@ -4,10 +4,12 @@
   "subject": "cat",
   "pose": "standing",
   "view": "side",
+  "status": "secondary",
+  "roles": ["neutral", "auxiliary"],
   "license": "CC0-1.0",
   "author": "Typographic Story Engine contributors",
   "source_type": "project-authored",
   "source_url": null,
   "attribution_required": false,
-  "notes": "Original project silhouette intended as the neutral production baseline for object-level motion."
+  "notes": "Approved secondary silhouette for neutral or auxiliary scenes; not a primary default."
 }
