@@ -87,9 +87,10 @@ def create_app(
 
     app = FastAPI(
         title="Typographic Story Engine API",
-        version="0.3.1",
+        version="0.4.0",
         description=(
-            "Local prompt-to-video studio and job API for semantic typographic stories."
+            "Local prompt-to-video studio with measured spatial composition and "
+            "direction-aware semantic characters."
         ),
     )
     app.state.job_store = store
@@ -159,6 +160,15 @@ def create_app(
             ),
             "assets": assets,
             "asset_words": sorted({str(asset["word"]) for asset in assets}),
+            "spatial_relations": [
+                "above",
+                "below",
+                "near",
+                "left_of",
+                "right_of",
+            ],
+            "direction_aware_characters": True,
+            "readable_glyph_mirroring": True,
         }
 
     @app.post(
