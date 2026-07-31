@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Five-point star silhouette</title>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <polygon fill="#000000" points="256,34 309,190 474,190 340,286 391,451 256,352 121,451 172,286 38,190 203,190"/>
+</svg>

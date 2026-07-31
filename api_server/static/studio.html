@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Typographic Story Studio</title>
   <link rel="stylesheet" href="/static/studio.css">
+  <link rel="stylesheet" href="/static/asset-browser.css">
 </head>
 <body>
   <main class="shell">
@@ -37,9 +38,9 @@
 
         <form id="generation-form">
           <label for="prompt">Prompt</label>
-          <textarea id="prompt" name="prompt" rows="6" maxlength="4000" required>A cat looks at the moon and then walks away.</textarea>
+          <textarea id="prompt" name="prompt" rows="6" maxlength="4000" required>A bird flies above a cloud under the moon.</textarea>
           <div class="prompt-footer">
-            <span>O catálogo atual conhece CAT, MOON e GROUND.</span>
+            <span id="asset-summary">Carregando palavras disponíveis...</span>
             <span id="prompt-count">0 / 4000</span>
           </div>
 
@@ -96,9 +97,7 @@
             </div>
           </details>
 
-          <button id="generate-button" class="primary-button" type="submit">
-            Gerar vídeo
-          </button>
+          <button id="generate-button" class="primary-button" type="submit">Gerar vídeo</button>
         </form>
       </section>
 
@@ -138,6 +137,18 @@
       </section>
     </div>
 
+    <section class="panel asset-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="section-label">Catálogo ativo</p>
+          <h2>Palavras e elementos disponíveis</h2>
+        </div>
+        <span id="asset-count" class="pill neutral">Carregando</span>
+      </div>
+      <p class="muted asset-help">Mencione uma dessas palavras ou um alias no prompt. Elementos não citados permanecem fora da cena, exceto o chão padrão.</p>
+      <div id="asset-grid" class="asset-grid"></div>
+    </section>
+
     <section class="panel history-panel">
       <div class="panel-heading">
         <div>
@@ -153,5 +164,6 @@
   </main>
 
   <script src="/static/studio.js" defer></script>
+  <script src="/static/asset-browser.js" defer></script>
 </body>
 </html>

@@ -7,13 +7,14 @@ from typing import Sequence
 
 from animate_scenes import main as animate_main
 from examples.build_cat_moon_ground_demo import main as build_assets_demo
+from examples.build_sky_nature_asset_pack import main as build_sky_nature_pack
 from export_video import main as export_video_main
 from plan_story import main as plan_story_main
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Convert a short CAT story into scenes, frames and an optional MP4"
+        description="Convert a short typographic story into scenes, frames and an optional MP4"
     )
     parser.add_argument(
         "--story",
@@ -53,64 +54,118 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _write_registry(root: Path, cat_asset: str) -> Path:
+    def glyphs(folder: str, identifier: str) -> Path:
+        return (root / "objects" / folder / f"{identifier}_scene.json").resolve()
+
+    assets: list[dict[str, object]] = []
+
+    def add(
+        *,
+        identifier: str,
+        word: str,
+        folder: str,
+        aliases: list[str],
+        tags: list[str],
+        z_index: int,
+        transform: dict[str, float],
+        always_include: bool = False,
+    ) -> None:
+        path = glyphs(folder, identifier)
+        if not path.is_file():
+            return
+        payload: dict[str, object] = {
+            "id": identifier,
+            "word": word,
+            "glyphs_path": str(path),
+            "aliases": aliases,
+            "tags": tags,
+            "z_index": z_index,
+            "transform": transform,
+        }
+        if always_include:
+            payload["always_include"] = True
+        assets.append(payload)
+
+    add(
+        identifier="moon_01",
+        word="MOON",
+        folder="moon",
+        aliases=["moon", "lua"],
+        tags=["celestial", "background", "night"],
+        z_index=1,
+        transform={"x": 900, "y": 45, "scale_x": 0.62, "scale_y": 0.62, "rotation": -7},
+    )
+    add(
+        identifier="star_01",
+        word="STAR",
+        folder="star",
+        aliases=["star", "stars", "estrela", "estrelas"],
+        tags=["celestial", "background", "night"],
+        z_index=1,
+        transform={"x": 730, "y": 70, "scale_x": 0.30, "scale_y": 0.30, "rotation": 8},
+    )
+    add(
+        identifier="sun_01",
+        word="SUN",
+        folder="sun",
+        aliases=["sun", "sol", "sunrise", "nascer do sol"],
+        tags=["celestial", "background", "day"],
+        z_index=1,
+        transform={"x": 930, "y": 35, "scale_x": 0.48, "scale_y": 0.48, "rotation": 0},
+    )
+    add(
+        identifier="cloud_01",
+        word="CLOUD",
+        folder="cloud",
+        aliases=["cloud", "clouds", "nuvem", "nuvens"],
+        tags=["sky", "weather", "background"],
+        z_index=2,
+        transform={"x": 500, "y": 80, "scale_x": 0.55, "scale_y": 0.42, "rotation": -2},
+    )
+    add(
+        identifier="ground_01",
+        word="GROUND",
+        folder="ground",
+        aliases=["ground", "chão", "chao"],
+        tags=["ground", "environment"],
+        always_include=True,
+        z_index=3,
+        transform={"x": -15, "y": 565, "scale_x": 1.25, "scale_y": 0.60},
+    )
+    add(
+        identifier="tree_01",
+        word="TREE",
+        folder="tree",
+        aliases=["tree", "trees", "árvore", "árvores", "arvore", "arvores"],
+        tags=["nature", "foreground", "environment"],
+        z_index=4,
+        transform={"x": 70, "y": 265, "scale_x": 0.68, "scale_y": 0.68, "rotation": 0},
+    )
+    add(
+        identifier="cat_01",
+        word="CAT",
+        folder="cat",
+        aliases=["cat", "gato"],
+        tags=["subject", "animal", "approved-pose", cat_asset],
+        z_index=5,
+        transform={"x": 360, "y": 215, "scale_x": 0.72, "scale_y": 0.72, "rotation": 0},
+    )
+    add(
+        identifier="bird_01",
+        word="BIRD",
+        folder="bird",
+        aliases=["bird", "birds", "pássaro", "pássaros", "passaro", "passaros", "ave", "aves"],
+        tags=["subject", "animal", "aerial", "approved-pose", "bird_flying_side_01"],
+        z_index=5,
+        transform={"x": 260, "y": 145, "scale_x": 0.42, "scale_y": 0.42, "rotation": -3},
+    )
+
     registry = {
-        "id": "cat_moon_ground_demo",
+        "id": "typographic_story_studio_default",
         "width": 1280,
         "height": 720,
         "background": "#F5F1E8",
-        "assets": [
-            {
-                "id": "moon_01",
-                "word": "MOON",
-                "glyphs_path": str(
-                    (root / "objects" / "moon" / "moon_01_scene.json").resolve()
-                ),
-                "aliases": ["moon", "lua"],
-                "tags": ["celestial", "background"],
-                "z_index": 1,
-                "transform": {
-                    "x": 900,
-                    "y": 45,
-                    "scale_x": 0.62,
-                    "scale_y": 0.62,
-                    "rotation": -7,
-                },
-            },
-            {
-                "id": "ground_01",
-                "word": "GROUND",
-                "glyphs_path": str(
-                    (root / "objects" / "ground" / "ground_01_scene.json").resolve()
-                ),
-                "aliases": ["ground", "chão", "chao"],
-                "tags": ["ground", "environment"],
-                "always_include": True,
-                "z_index": 2,
-                "transform": {
-                    "x": -15,
-                    "y": 565,
-                    "scale_x": 1.25,
-                    "scale_y": 0.60,
-                },
-            },
-            {
-                "id": "cat_01",
-                "word": "CAT",
-                "glyphs_path": str(
-                    (root / "objects" / "cat" / "cat_01_scene.json").resolve()
-                ),
-                "aliases": ["cat", "gato"],
-                "tags": ["subject", "animal", "approved-pose", cat_asset],
-                "z_index": 3,
-                "transform": {
-                    "x": 360,
-                    "y": 215,
-                    "scale_x": 0.72,
-                    "scale_y": 0.72,
-                    "rotation": 0,
-                },
-            },
-        ],
+        "assets": assets,
     }
     path = root / "asset_registry.json"
     path.write_text(
@@ -136,33 +191,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     if assets_result != 0:
         return assets_result
 
+    pack_result = build_sky_nature_pack(["--output-dir", str(root)])
+    if pack_result != 0:
+        return pack_result
+
     registry_path = _write_registry(root, args.cat_asset)
     plan_arguments = [
-        "--story",
-        args.story,
-        "--registry",
-        str(registry_path),
-        "--id",
-        args.id,
-        "--duration",
-        str(args.duration),
-        "--fps",
-        str(args.fps),
-        "--provider",
-        args.provider,
-        "--output-dir",
-        str(root / "plans"),
+        "--story", args.story,
+        "--registry", str(registry_path),
+        "--id", args.id,
+        "--duration", str(args.duration),
+        "--fps", str(args.fps),
+        "--provider", args.provider,
+        "--output-dir", str(root / "plans"),
     ]
     if args.provider == "ollama":
         if args.ollama_model:
             plan_arguments.extend(["--ollama-model", args.ollama_model])
         plan_arguments.extend(
-            [
-                "--ollama-url",
-                args.ollama_url,
-                "--ollama-timeout",
-                str(args.ollama_timeout),
-            ]
+            ["--ollama-url", args.ollama_url, "--ollama-timeout", str(args.ollama_timeout)]
         )
     if args.no_fallback:
         plan_arguments.append("--no-fallback")
@@ -174,10 +221,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     plan_root = root / "plans" / args.id
     animation_file = plan_root / f"{args.id}_animation.json"
     animation_arguments = [
-        "--animation",
-        str(animation_file),
-        "--output-dir",
-        str(root / "animation"),
+        "--animation", str(animation_file),
+        "--output-dir", str(root / "animation"),
     ]
     if args.skip_video:
         animation_arguments.append("--skip-png")
@@ -193,16 +238,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     frames_dir = root / "animation" / transition_id / "frames" / "png"
     video_path = root / f"{args.id}.mp4"
     export_arguments = [
-        "--frames-dir",
-        str(frames_dir),
-        "--output",
-        str(video_path),
-        "--fps",
-        str(args.fps),
-        "--crf",
-        str(args.crf),
-        "--preset",
-        args.preset,
+        "--frames-dir", str(frames_dir),
+        "--output", str(video_path),
+        "--fps", str(args.fps),
+        "--crf", str(args.crf),
+        "--preset", args.preset,
     ]
     if args.ffmpeg:
         export_arguments.extend(["--ffmpeg", args.ffmpeg])

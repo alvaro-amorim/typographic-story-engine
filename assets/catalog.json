@@ -1,11 +1,16 @@
 {
-  "version": "0.2.2",
+  "version": "0.3.0",
   "defaults": {
     "cat.contemplative": "cat_sitting_side_01",
     "cat.locomotion": "cat_walking_side_01",
     "cat.neutral": "cat_standing_side_01",
+    "bird.flight": "bird_flying_side_01",
     "environment.moon": "moon_crescent_01",
-    "environment.ground": "ground_hill_01"
+    "environment.ground": "ground_hill_01",
+    "environment.star": "star_five_point_01",
+    "environment.cloud": "cloud_soft_01",
+    "environment.sun": "sun_rays_01",
+    "environment.tree": "tree_deciduous_01"
   },
   "pose_sequences": [
     {
@@ -30,18 +35,8 @@
       "source_svg": "silhouettes/characters/cat/cat_standing_side_01/source.svg",
       "mask_width": 512,
       "mask_height": 512,
-      "anchors": {
-        "ground": [0.52, 0.89],
-        "head": [0.79, 0.45],
-        "tail": [0.10, 0.52]
-      },
-      "license": {
-        "spdx": "CC0-1.0",
-        "author": "Typographic Story Engine contributors",
-        "source_type": "project-authored",
-        "source_url": null,
-        "attribution_required": false
-      },
+      "anchors": {"ground": [0.52, 0.89], "head": [0.79, 0.45], "tail": [0.10, 0.52]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
       "tags": ["cat", "gato", "subject", "animal", "standing", "side-view"]
     },
     {
@@ -56,18 +51,8 @@
       "source_svg": "silhouettes/characters/cat/cat_sitting_side_01/source.svg",
       "mask_width": 512,
       "mask_height": 512,
-      "anchors": {
-        "ground": [0.50, 0.91],
-        "head": [0.63, 0.28],
-        "tail": [0.20, 0.68]
-      },
-      "license": {
-        "spdx": "CC0-1.0",
-        "author": "Typographic Story Engine contributors",
-        "source_type": "project-authored",
-        "source_url": null,
-        "attribution_required": false
-      },
+      "anchors": {"ground": [0.50, 0.91], "head": [0.63, 0.28], "tail": [0.20, 0.68]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
       "tags": ["cat", "gato", "subject", "animal", "sitting", "side-view"]
     },
     {
@@ -82,19 +67,25 @@
       "source_svg": "silhouettes/characters/cat/cat_walking_side_01/source.svg",
       "mask_width": 512,
       "mask_height": 512,
-      "anchors": {
-        "ground": [0.51, 0.89],
-        "head": [0.81, 0.44],
-        "tail": [0.08, 0.49]
-      },
-      "license": {
-        "spdx": "CC0-1.0",
-        "author": "Typographic Story Engine contributors",
-        "source_type": "project-authored",
-        "source_url": null,
-        "attribution_required": false
-      },
+      "anchors": {"ground": [0.51, 0.89], "head": [0.81, 0.44], "tail": [0.08, 0.49]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
       "tags": ["cat", "gato", "subject", "animal", "walking", "side-view"]
+    },
+    {
+      "id": "bird_flying_side_01",
+      "word": "BIRD",
+      "category": "character",
+      "subject": "bird",
+      "pose": "flying",
+      "view": "side",
+      "status": "primary",
+      "roles": ["flight", "aerial-subject", "default-motion"],
+      "source_svg": "silhouettes/characters/bird/bird_flying_side_01/source.svg",
+      "mask_width": 512,
+      "mask_height": 512,
+      "anchors": {"center": [0.52, 0.55], "head": [0.79, 0.50], "tail": [0.15, 0.59]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
+      "tags": ["bird", "passaro", "pássaro", "ave", "subject", "animal", "flying", "side-view"]
     },
     {
       "id": "moon_crescent_01",
@@ -108,16 +99,8 @@
       "source_svg": "silhouettes/environments/moon/moon_crescent_01/source.svg",
       "mask_width": 512,
       "mask_height": 512,
-      "anchors": {
-        "center": [0.50, 0.50]
-      },
-      "license": {
-        "spdx": "CC0-1.0",
-        "author": "Typographic Story Engine contributors",
-        "source_type": "project-authored",
-        "source_url": null,
-        "attribution_required": false
-      },
+      "anchors": {"center": [0.50, 0.50]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
       "tags": ["moon", "lua", "crescent", "night", "background"]
     },
     {
@@ -132,19 +115,73 @@
       "source_svg": "silhouettes/environments/ground/ground_hill_01/source.svg",
       "mask_width": 1024,
       "mask_height": 256,
-      "anchors": {
-        "surface_left": [0.05, 0.45],
-        "surface_center": [0.50, 0.39],
-        "surface_right": [0.95, 0.48]
-      },
-      "license": {
-        "spdx": "CC0-1.0",
-        "author": "Typographic Story Engine contributors",
-        "source_type": "project-authored",
-        "source_url": null,
-        "attribution_required": false
-      },
+      "anchors": {"surface_left": [0.05, 0.45], "surface_center": [0.50, 0.39], "surface_right": [0.95, 0.48]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
       "tags": ["ground", "chão", "chao", "environment", "hill"]
+    },
+    {
+      "id": "star_five_point_01",
+      "word": "STAR",
+      "category": "environment",
+      "subject": "star",
+      "pose": "five-point",
+      "view": "front",
+      "status": "primary",
+      "roles": ["night-background", "celestial-accent"],
+      "source_svg": "silhouettes/environments/star/star_five_point_01/source.svg",
+      "mask_width": 512,
+      "mask_height": 512,
+      "anchors": {"center": [0.50, 0.50]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
+      "tags": ["star", "stars", "estrela", "estrelas", "night", "background"]
+    },
+    {
+      "id": "cloud_soft_01",
+      "word": "CLOUD",
+      "category": "environment",
+      "subject": "cloud",
+      "pose": "soft",
+      "view": "front",
+      "status": "primary",
+      "roles": ["sky-layer", "weather"],
+      "source_svg": "silhouettes/environments/cloud/cloud_soft_01/source.svg",
+      "mask_width": 512,
+      "mask_height": 512,
+      "anchors": {"center": [0.50, 0.56]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
+      "tags": ["cloud", "clouds", "nuvem", "nuvens", "sky", "weather"]
+    },
+    {
+      "id": "sun_rays_01",
+      "word": "SUN",
+      "category": "environment",
+      "subject": "sun",
+      "pose": "rays",
+      "view": "front",
+      "status": "primary",
+      "roles": ["day-background", "celestial"],
+      "source_svg": "silhouettes/environments/sun/sun_rays_01/source.svg",
+      "mask_width": 512,
+      "mask_height": 512,
+      "anchors": {"center": [0.50, 0.50]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
+      "tags": ["sun", "sol", "day", "sunrise", "nascer do sol", "background"]
+    },
+    {
+      "id": "tree_deciduous_01",
+      "word": "TREE",
+      "category": "environment",
+      "subject": "tree",
+      "pose": "deciduous",
+      "view": "front",
+      "status": "primary",
+      "roles": ["nature", "foreground"],
+      "source_svg": "silhouettes/environments/tree/tree_deciduous_01/source.svg",
+      "mask_width": 512,
+      "mask_height": 512,
+      "anchors": {"ground": [0.50, 0.92], "crown": [0.50, 0.34]},
+      "license": {"spdx": "CC0-1.0", "author": "Typographic Story Engine contributors", "source_type": "project-authored", "source_url": null, "attribution_required": false},
+      "tags": ["tree", "trees", "arvore", "árvore", "arvores", "árvores", "nature", "foreground"]
     }
   ]
 }
