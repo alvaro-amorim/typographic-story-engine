@@ -20,15 +20,38 @@ assets/
 
 ## Baseline visual aprovado
 
-O catálogo v0.2.2 registra funções explícitas para evitar trocas silenciosas de pose:
-
 ```text
 cat.contemplative → cat_sitting_side_01   (primary)
 cat.locomotion    → cat_walking_side_01   (primary)
 cat.neutral       → cat_standing_side_01  (secondary)
+bird.flight       → bird_flying_side_01   (primary)
 ```
 
-A sequência `cat_sitting_to_walking_01` também está registrada como `planned`. Isso documenta a intenção narrativa sem afirmar que o morph entre silhuetas já foi implementado. Enquanto essa transição não existir, cada animação continua usando uma única fonte de glyphs persistente.
+A sequência `cat_sitting_to_walking_01` continua registrada como `planned`. Isso documenta a intenção narrativa sem afirmar que o morph entre silhuetas já foi implementado.
+
+## Catálogo atual
+
+### Personagens
+
+```text
+CAT  → cat_standing_side_01
+CAT  → cat_sitting_side_01
+CAT  → cat_walking_side_01
+BIRD → bird_flying_side_01
+```
+
+### Cenário e natureza
+
+```text
+MOON   → moon_crescent_01
+GROUND → ground_hill_01
+STAR   → star_five_point_01
+CLOUD  → cloud_soft_01
+SUN    → sun_rays_01
+TREE   → tree_deciduous_01
+```
+
+O registry do Studio contém aliases em português e inglês. Exemplos: `bird/pássaro/ave`, `cloud/nuvem`, `star/estrela`, `sun/sol` e `tree/árvore`.
 
 ## Regras
 
@@ -39,7 +62,8 @@ A sequência `cat_sitting_to_walking_01` também está registrada como `planned`
 - coordenadas de `anchors` normalizadas entre `0` e `1`;
 - um asset aprovado nunca deve mudar silenciosamente: alterações visuais exigem revisão;
 - assets `primary` podem ser usados como defaults de produto;
-- assets `secondary` permanecem disponíveis, mas não substituem os defaults automaticamente.
+- assets `secondary` permanecem disponíveis, mas não substituem os defaults automaticamente;
+- assets externos futuros devem preservar autor, licença e URL de origem reais.
 
 ## Construir máscaras
 
@@ -53,4 +77,18 @@ A saída padrão é:
 outputs/_asset_cache/<category>/<subject>/<asset-id>/mask.png
 ```
 
-Os vetores iniciais deste repositório foram desenhados para o próprio projeto e dedicados a CC0-1.0. Assets externos adicionados no futuro devem preservar a licença e a URL de origem reais.
+## Atualizar o cache do Studio
+
+O primeiro início após uma expansão do catálogo reconstrói o pacote automaticamente:
+
+```powershell
+python -m commands.studio
+```
+
+Para preparar tudo antecipadamente e verificar o ambiente:
+
+```powershell
+python -m commands.doctor --prepare-assets
+```
+
+Os vetores iniciais deste repositório foram desenhados para o próprio projeto e dedicados a CC0-1.0.
