@@ -8,6 +8,11 @@ from pathlib import Path
 from engine.animation_models import SceneAnimationSpec
 from engine.asset_registry import AssetRegistry, AssetSpec, normalize_story_text
 from engine.scene_models import SceneObjectSpec, SceneSpec, SceneTransform
+from engine.spatial_planner import (
+    apply_spatial_relations,
+    orient_for_direction,
+    parse_spatial_relations,
+)
 from engine.story_models import (
     MovementDirection,
     StoryDecision,
@@ -240,6 +245,20 @@ def plan_story_from_decision(
         raise ValueError("story cannot be blank")
 
     subject, included = _validated_decision_assets(registry, decision)
+    relations = parse_spatial_relations(story, included)
+    base_transforms = apply_spatial_relations(
+        included,
+        relations,
+        canvas_width=registry.width,
+        canvas_height=registry.height,
+    )
+    subject_start = orient_for_direction(
+        subject,
+        base_transforms[subject.id],
+        decision.movement_direction,
+    )
+    base_transforms[subject.id] = subject_start
+
     movement_distance = (
         registry.width * decision.movement_fraction
         if decision.movement_direction != "pose"
@@ -248,11 +267,12 @@ def plan_story_from_decision(
     identifier = _story_id(story, story_id)
 
     first_objects = [
-        _scene_object(asset, asset.transform.model_copy(deep=True)) for asset in included
+        _scene_object(asset, base_transforms[asset.id].model_copy(deep=True))
+        for asset in included
     ]
     second_objects: list[SceneObjectSpec] = []
     for asset in included:
-        transform = asset.transform.model_copy(deep=True)
+        transform = base_transforms[asset.id].model_copy(deep=True)
         if asset.id == subject.id:
             transform = _end_subject_transform(
                 transform,
@@ -297,6 +317,9 @@ def plan_story_from_decision(
         included_asset_ids=[asset.id for asset in included],
         movement_direction=decision.movement_direction,
         movement_distance=movement_distance,
+        spatial_relations=[relation.model_dump() for relation in relations],
+        subject_source_facing=subject.facing,
+        subject_mirrored=subject_start.mirror_x,
         scene_files=[first_name, second_name],
         animation_file=animation_name,
         registry_file=registry_file,
