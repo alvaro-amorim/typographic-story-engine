@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -94,6 +95,16 @@ class JobStore:
                     reverse=True,
                 )
             ]
+
+    def delete(self, job_id: str) -> bool:
+        with self._lock:
+            record = self._jobs.pop(job_id, None)
+            if record is None:
+                return False
+            root = self._job_root(job_id).resolve()
+            if root.is_relative_to(self.output_root) and root.is_dir():
+                shutil.rmtree(root)
+            return True
 
     def _update(self, job_id: str, **changes: object) -> JobRecord:
         with self._lock:

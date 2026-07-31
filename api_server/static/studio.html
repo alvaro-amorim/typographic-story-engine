@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Typographic Story Studio</title>
+  <link rel="stylesheet" href="/static/studio.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Typographic Story Engine</p>
+        <h1>Prompt para vídeo tipográfico</h1>
+        <p class="subtitle">Descreva a cena, gere o vídeo e assista ao resultado sem sair desta página.</p>
+      </div>
+      <nav class="hero-links" aria-label="Links técnicos">
+        <a href="/docs" target="_blank" rel="noreferrer">OpenAPI</a>
+        <a href="/health" target="_blank" rel="noreferrer">Health</a>
+      </nav>
+    </header>
+
+    <section class="capabilities" aria-label="Estado do ambiente">
+      <span id="api-status" class="pill neutral">API verificando</span>
+      <span id="registry-status" class="pill neutral">Assets verificando</span>
+      <span id="ffmpeg-status" class="pill neutral">FFmpeg verificando</span>
+    </section>
+
+    <div class="workspace">
+      <section class="panel composer">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">Nova geração</p>
+            <h2>O que deve acontecer no vídeo?</h2>
+          </div>
+        </div>
+
+        <form id="generation-form">
+          <label for="prompt">Prompt</label>
+          <textarea id="prompt" name="prompt" rows="6" maxlength="4000" required>A cat looks at the moon and then walks away.</textarea>
+          <div class="prompt-footer">
+            <span>O catálogo atual conhece CAT, MOON e GROUND.</span>
+            <span id="prompt-count">0 / 4000</span>
+          </div>
+
+          <div class="form-grid">
+            <div>
+              <label for="preset">Preset</label>
+              <select id="preset" name="preset">
+                <option value="draft">Rascunho rápido</option>
+                <option value="standard">Padrão</option>
+                <option value="quality">Qualidade</option>
+              </select>
+              <p id="preset-description" class="field-note"></p>
+            </div>
+            <div>
+              <label for="provider">Planner</label>
+              <select id="provider" name="provider">
+                <option value="deterministic">Determinístico</option>
+                <option value="ollama">Ollama local</option>
+              </select>
+              <p class="field-note">A IA apenas seleciona assets aprovados.</p>
+            </div>
+          </div>
+
+          <div id="ollama-fields" class="form-grid hidden">
+            <div>
+              <label for="ollama-model">Modelo Ollama</label>
+              <input id="ollama-model" name="ollama-model" value="qwen3:4b">
+            </div>
+            <div>
+              <label for="ollama-url">URL Ollama</label>
+              <input id="ollama-url" name="ollama-url" value="http://localhost:11434">
+            </div>
+          </div>
+
+          <details class="advanced">
+            <summary>Configurações avançadas</summary>
+            <div class="form-grid advanced-grid">
+              <div>
+                <label for="duration">Duração em segundos</label>
+                <input id="duration" name="duration" type="number" min="0.1" max="60" step="0.1" placeholder="Usar preset">
+              </div>
+              <div>
+                <label for="fps">Frames por segundo</label>
+                <input id="fps" name="fps" type="number" min="1" max="60" step="1" placeholder="Usar preset">
+              </div>
+              <div>
+                <label for="movement">Deslocamento</label>
+                <input id="movement" name="movement" type="number" min="0" max="1" step="0.01" value="0.28">
+              </div>
+              <div class="check-field">
+                <input id="generate-video" name="generate-video" type="checkbox" checked>
+                <label for="generate-video">Gerar MP4</label>
+              </div>
+            </div>
+          </details>
+
+          <button id="generate-button" class="primary-button" type="submit">
+            Gerar vídeo
+          </button>
+        </form>
+      </section>
+
+      <section class="panel result-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-label">Execução atual</p>
+            <h2 id="result-title">Nenhuma geração iniciada</h2>
+          </div>
+          <span id="job-status" class="status-badge idle">Aguardando</span>
+        </div>
+
+        <div id="empty-result" class="empty-state">
+          <div class="empty-symbol">Aa</div>
+          <p>O vídeo e os detalhes da geração aparecerão aqui.</p>
+        </div>
+
+        <div id="active-result" class="hidden">
+          <div class="progress-row">
+            <div class="progress-track" aria-label="Progresso da geração">
+              <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <span id="progress-value">0%</span>
+          </div>
+          <p id="stage-label" class="stage-label">Na fila</p>
+          <p id="error-message" class="error-message hidden"></p>
+
+          <video id="video-player" class="media-player hidden" controls preload="metadata"></video>
+          <img id="preview-image" class="media-player hidden" alt="Último frame gerado">
+
+          <div id="job-metadata" class="metadata-grid"></div>
+          <div class="artifact-section">
+            <h3>Artefatos</h3>
+            <div id="artifact-list" class="artifact-list"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel history-panel">
+      <div class="panel-heading">
+        <div>
+          <p class="section-label">Histórico</p>
+          <h2>Gerações recentes</h2>
+        </div>
+        <button id="refresh-history" class="secondary-button" type="button">Atualizar</button>
+      </div>
+      <div id="history-list" class="history-list">
+        <p class="muted">Carregando jobs...</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/studio.js" defer></script>
+</body>
+</html>
