@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Flying bird side silhouette</title>
+  <rect width="512" height="512" fill="#ffffff"/>
+  <ellipse cx="273" cy="294" rx="142" ry="78" fill="#000000"/>
+  <circle cx="401" cy="258" r="52" fill="#000000"/>
+  <polygon fill="#000000" points="447,245 506,268 447,286"/>
+  <path fill="#000000" d="M181 289 C154 231 164 154 218 80 C231 159 276 217 347 266 C291 243 239 247 181 289 Z"/>
+  <path fill="#000000" d="M229 342 C198 381 165 409 119 427 C129 378 150 337 182 306 Z"/>
+  <polygon fill="#000000" points="143,289 43,235 117,318"/>
+  <polygon fill="#000000" points="151,320 45,352 133,278"/>
+</svg>
