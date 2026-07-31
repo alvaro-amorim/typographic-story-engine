@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 from pathlib import Path
 
@@ -16,8 +17,9 @@ _BOOTSTRAP_LOCK = threading.RLock()
 
 def registry_is_ready(root: str | Path = DEFAULT_STUDIO_ROOT) -> bool:
     target = Path(root).resolve()
+    registry_path = target / "asset_registry.json"
     required = (
-        target / "asset_registry.json",
+        registry_path,
         target / "objects" / "cat" / "cat_01_scene.json",
         target / "objects" / "moon" / "moon_01_scene.json",
         target / "objects" / "ground" / "ground_01_scene.json",
@@ -27,7 +29,18 @@ def registry_is_ready(root: str | Path = DEFAULT_STUDIO_ROOT) -> bool:
         target / "objects" / "tree" / "tree_01_scene.json",
         target / "objects" / "bird" / "bird_01_scene.json",
     )
-    return all(path.is_file() for path in required)
+    if not all(path.is_file() for path in required):
+        return False
+
+    try:
+        payload = json.loads(registry_path.read_text(encoding="utf-8"))
+        assets = {item["id"]: item for item in payload["assets"]}
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return False
+    return (
+        assets.get("cat_01", {}).get("facing") == "right"
+        and assets.get("bird_01", {}).get("facing") == "right"
+    )
 
 
 def ensure_default_registry(
