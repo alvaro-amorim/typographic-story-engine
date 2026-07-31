@@ -4,12 +4,14 @@ import json
 import re
 import unicodedata
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from engine.scene_models import SceneTransform
 
 _HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+AssetFacing = Literal["left", "right", "neutral"]
 
 
 def normalize_story_text(value: str) -> str:
@@ -33,6 +35,7 @@ class AssetSpec(BaseModel):
     transform: SceneTransform = Field(default_factory=SceneTransform)
     visible: bool = True
     always_include: bool = False
+    facing: AssetFacing = "neutral"
 
     @field_validator("id")
     @classmethod
