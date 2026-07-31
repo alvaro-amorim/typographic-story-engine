@@ -9,6 +9,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from api_server.asset_browser import registry_asset_summaries
 from api_server.job_store import JobStore
 from api_server.models import (
     ArtifactList,
@@ -86,7 +87,7 @@ def create_app(
 
     app = FastAPI(
         title="Typographic Story Engine API",
-        version="0.3.0",
+        version="0.3.1",
         description=(
             "Local prompt-to-video studio and job API for semantic typographic stories."
         ),
@@ -140,6 +141,7 @@ def create_app(
     @app.get("/v1/capabilities")
     def capabilities() -> dict[str, object]:
         ffmpeg_path = _resolve_executable(None, "ffmpeg")
+        assets = registry_asset_summaries(default_registry)
         return {
             "version": app.version,
             "studio_url": "/studio",
@@ -155,6 +157,8 @@ def create_app(
             "default_registry_path": (
                 str(default_registry) if default_registry is not None else None
             ),
+            "assets": assets,
+            "asset_words": sorted({str(asset["word"]) for asset in assets}),
         }
 
     @app.post(
