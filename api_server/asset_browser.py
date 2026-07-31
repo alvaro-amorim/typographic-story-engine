@@ -24,6 +24,7 @@ def registry_asset_summaries(registry_path: str | Path | None) -> list[dict[str,
             "tags": sorted(asset.tags),
             "kind": "subject" if "subject" in asset.tags else "environment",
             "always_include": asset.always_include,
+            "facing": asset.facing,
         }
         for asset in registry.assets
     ]

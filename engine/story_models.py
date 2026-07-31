@@ -38,6 +38,9 @@ class StoryPlanManifest(BaseModel):
     included_asset_ids: list[str]
     movement_direction: MovementDirection
     movement_distance: float
+    spatial_relations: list[dict[str, str]] = Field(default_factory=list)
+    subject_source_facing: str = "neutral"
+    subject_mirrored: bool = False
     scene_files: list[str] = Field(min_length=2, max_length=2)
     animation_file: str
     registry_file: str

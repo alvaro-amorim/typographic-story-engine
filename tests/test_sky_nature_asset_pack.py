@@ -96,9 +96,10 @@ def test_english_bird_prompt_recognizes_default_flight_movement(tmp_path: Path) 
     assert decision.movement_direction == "right"
 
 
-def test_registry_readiness_requires_complete_expanded_pack(tmp_path: Path) -> None:
-    required = [
-        "asset_registry.json",
+def test_registry_readiness_requires_complete_pack_and_facing_metadata(
+    tmp_path: Path,
+) -> None:
+    required_objects = [
         "objects/cat/cat_01_scene.json",
         "objects/moon/moon_01_scene.json",
         "objects/ground/ground_01_scene.json",
@@ -108,16 +109,42 @@ def test_registry_readiness_requires_complete_expanded_pack(tmp_path: Path) -> N
         "objects/tree/tree_01_scene.json",
         "objects/bird/bird_01_scene.json",
     ]
-    for relative in required[:-1]:
+    for relative in required_objects[:-1]:
         path = tmp_path / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("{}", encoding="utf-8")
+
+    registry = tmp_path / "asset_registry.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "assets": [
+                    {"id": "cat_01", "facing": "right"},
+                    {"id": "bird_01", "facing": "right"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
     assert registry_is_ready(tmp_path) is False
 
-    final = tmp_path / required[-1]
+    final = tmp_path / required_objects[-1]
     final.parent.mkdir(parents=True, exist_ok=True)
     final.write_text("{}", encoding="utf-8")
     assert registry_is_ready(tmp_path) is True
+
+    registry.write_text(
+        json.dumps(
+            {
+                "assets": [
+                    {"id": "cat_01"},
+                    {"id": "bird_01"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert registry_is_ready(tmp_path) is False
 
 
 def test_capabilities_exposes_registry_assets_to_studio(tmp_path: Path) -> None:

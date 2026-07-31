@@ -153,6 +153,7 @@ def interpolate_transform(
 ) -> SceneTransform:
     start_opacity = start.opacity if start_visible else 0.0
     end_opacity = end.opacity if end_visible else 0.0
+    mirror_x = start.mirror_x if progress < 0.5 else end.mirror_x
     return SceneTransform(
         x=_lerp(start.x, end.x, progress),
         y=_lerp(start.y, end.y, progress),
@@ -160,6 +161,7 @@ def interpolate_transform(
         scale_y=_lerp(start.scale_y, end.scale_y, progress),
         rotation=_lerp_rotation(start.rotation, end.rotation, progress),
         opacity=_lerp(start_opacity, end_opacity, progress),
+        mirror_x=mirror_x,
     )
 
 

@@ -69,6 +69,7 @@ def _write_registry(root: Path, cat_asset: str) -> Path:
         z_index: int,
         transform: dict[str, float],
         always_include: bool = False,
+        facing: str = "neutral",
     ) -> None:
         path = glyphs(folder, identifier)
         if not path.is_file():
@@ -81,6 +82,7 @@ def _write_registry(root: Path, cat_asset: str) -> Path:
             "tags": tags,
             "z_index": z_index,
             "transform": transform,
+            "facing": facing,
         }
         if always_include:
             payload["always_include"] = True
@@ -149,6 +151,7 @@ def _write_registry(root: Path, cat_asset: str) -> Path:
         tags=["subject", "animal", "approved-pose", cat_asset],
         z_index=5,
         transform={"x": 360, "y": 215, "scale_x": 0.72, "scale_y": 0.72, "rotation": 0},
+        facing="right",
     )
     add(
         identifier="bird_01",
@@ -158,6 +161,7 @@ def _write_registry(root: Path, cat_asset: str) -> Path:
         tags=["subject", "animal", "aerial", "approved-pose", "bird_flying_side_01"],
         z_index=5,
         transform={"x": 260, "y": 145, "scale_x": 0.42, "scale_y": 0.42, "rotation": -3},
+        facing="right",
     )
 
     registry = {
