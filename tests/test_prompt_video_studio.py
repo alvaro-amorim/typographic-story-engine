@@ -40,7 +40,7 @@ def test_studio_page_capabilities_and_static_files(tmp_path: Path, monkeypatch) 
         )
     )
 
-    assert client.get("/").status_code in {302, 307}
+    assert client.get("/", follow_redirects=False).status_code in {302, 307}
     studio = client.get("/studio")
     assert studio.status_code == 200
     assert "Prompt para vídeo tipográfico" in studio.text
