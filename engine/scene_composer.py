@@ -109,10 +109,22 @@ def _transform_attribute(spec: SceneObjectSpec) -> str:
     return " ".join(parts)
 
 
-def _render_glyph(glyph: Glyph) -> str:
-    transform = f"translate({glyph.x:.3f} {glyph.y:.3f})"
-    if glyph.rotation != 0.0:
-        transform += f" rotate({glyph.rotation:.3f})"
+def _mirror_center_x(glyphs: Sequence[Glyph]) -> float:
+    min_x = min(glyph.x for glyph in glyphs)
+    max_x = max(glyph.x for glyph in glyphs)
+    return (min_x + max_x) / 2.0
+
+
+def _render_glyph(glyph: Glyph, *, mirror_center_x: float | None = None) -> str:
+    x = glyph.x
+    rotation = glyph.rotation
+    if mirror_center_x is not None:
+        x = 2.0 * mirror_center_x - glyph.x
+        rotation = -glyph.rotation
+
+    transform = f"translate({x:.3f} {glyph.y:.3f})"
+    if rotation != 0.0:
+        transform += f" rotate({rotation:.3f})"
 
     return (
         f'<text x="0" y="0" font-size="{glyph.font_size:.3f}" '
@@ -157,11 +169,16 @@ def render_scene_svg(scene: SceneSpec, objects: Sequence[LoadedSceneObject]) -> 
         spec = loaded.spec
         if not spec.visible:
             continue
+        mirrored_center = (
+            _mirror_center_x(loaded.glyphs) if spec.transform.mirror_x else None
+        )
         lines.append(
             f'    <g id="object_{escape(spec.id, quote=True)}" '
             f'data-object-id="{escape(spec.id, quote=True)}" '
             f'data-word="{escape(spec.word, quote=True)}" '
-            f'data-z-index="{spec.z_index}" opacity="{spec.transform.opacity:.3f}" '
+            f'data-z-index="{spec.z_index}" '
+            f'data-mirror-x="{str(spec.transform.mirror_x).lower()}" '
+            f'opacity="{spec.transform.opacity:.3f}" '
             f'transform="{_transform_attribute(spec)}">'
         )
 
@@ -192,7 +209,10 @@ def render_scene_svg(scene: SceneSpec, objects: Sequence[LoadedSceneObject]) -> 
                     f'data-style-role="{escape(current_role, quote=True)}">'
                 )
 
-            lines.append("          " + _render_glyph(glyph))
+            lines.append(
+                "          "
+                + _render_glyph(glyph, mirror_center_x=mirrored_center)
+            )
 
         if current_role is not None:
             lines.append("        </g>")
@@ -247,6 +267,7 @@ def validate_composed_scene(
             "invalid_glyph_ids": invalid,
             "semantic_characters_respected": not invalid,
             "z_index": loaded.spec.z_index,
+            "mirror_x": loaded.spec.transform.mirror_x,
         }
 
     id_counts = Counter(all_glyph_ids)
