@@ -17,6 +17,7 @@ class SceneTransform(BaseModel):
     scale_y: float = Field(default=1.0, gt=0.0)
     rotation: float = 0.0
     opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+    mirror_x: bool = False
 
 
 class SceneObjectSpec(BaseModel):
