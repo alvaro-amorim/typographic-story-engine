@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from engine.story_pipeline import StoryPipelineRequest
 
@@ -13,6 +14,33 @@ GenerationPreset = Literal["draft", "standard", "quality"]
 
 class StoryJobCreate(BaseModel):
     pipeline: StoryPipelineRequest
+
+
+class OllamaConnectionRequest(BaseModel):
+    base_url: str = "http://localhost:11434"
+    timeout_seconds: float = Field(default=2.0, gt=0.0, le=600.0)
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        parsed = urlparse(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("base_url must be an absolute HTTP(S) URL")
+        return normalized
+
+
+class OllamaModelTestRequest(OllamaConnectionRequest):
+    model: str = Field(min_length=1, max_length=200)
+    timeout_seconds: float = Field(default=60.0, gt=0.0, le=600.0)
+
+    @field_validator("model")
+    @classmethod
+    def normalize_model(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("model cannot be blank")
+        return normalized
 
 
 class PromptGenerationRequest(BaseModel):
@@ -62,6 +90,7 @@ class JobRecord(BaseModel):
     story_id: str | None = None
     planner_provider: str | None = None
     planner_fallback_used: bool = False
+    planner_error: str | None = None
     frame_count: int | None = None
     artifacts: list[str] = Field(default_factory=list)
     video_path: str | None = None
