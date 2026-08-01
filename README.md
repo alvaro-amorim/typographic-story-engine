@@ -4,12 +4,12 @@ Motor local para transformar histórias curtas em cenas e vídeos compostos por 
 
 Um objeto `MOON` usa somente `M`, `O`, `O`, `N`. Um objeto `CAT` usa somente `C`, `A`, `T`. Cada objeto mantém sua própria regra semântica mesmo quando vários aparecem na mesma cena.
 
-## Estado atual — Prompt Video Studio v0.4
+## Estado atual — Prompt Video Studio v0.5
 
 ```text
 prompt
   → Asset Registry aprovado
-  → planner determinístico ou Ollama local
+  → planner determinístico ou Ollama local descoberto automaticamente
   → relações espaciais medidas
   → orientação coerente do personagem
   → Scene Graphs persistentes
@@ -41,6 +41,9 @@ No Studio você pode:
 - escrever o prompt do vídeo;
 - escolher modo rápido, padrão ou qualidade;
 - usar planner determinístico ou Ollama;
+- descobrir e selecionar modelos Ollama instalados;
+- testar uma inferência local e medir sua latência;
+- ver claramente quando o fallback determinístico foi usado;
 - navegar pelos assets disponíveis;
 - acompanhar o progresso;
 - assistir ao MP4 na própria página;
@@ -65,7 +68,7 @@ Launcher PowerShell opcional:
 python -m commands.doctor --prepare-assets
 ```
 
-O comando verifica Python, dependências, catálogo, FFmpeg, registry do Studio e Ollama.
+O comando verifica Python, dependências, catálogo, FFmpeg, registry do Studio, versão do Ollama, latência e nomes dos modelos locais.
 
 ## Instalação no Windows
 
@@ -79,7 +82,7 @@ python -m pip install -r requirements-dev.txt
 ## Estrutura do repositório
 
 ```text
-├── api_server/   # FastAPI, Studio web e jobs locais
+├── api_server/   # FastAPI, Studio web, Ollama local e jobs
 ├── assets/       # silhuetas aprovadas, metadados e licenças
 ├── commands/     # CLIs oficiais executadas com python -m
 ├── docs/         # documentação técnica
@@ -168,6 +171,26 @@ Relações encadeadas são aplicadas em mais de uma passagem para que objetos de
 
 Isso evita o efeito de “andar de ré” sem usar `scale(-1)`: as letras continuam normais e legíveis.
 
+## Ollama local
+
+Instale um modelo, por exemplo:
+
+```powershell
+ollama pull qwen3:4b
+```
+
+No Studio:
+
+1. selecione `Ollama local`;
+2. escolha um modelo encontrado automaticamente;
+3. clique em `Testar modelo`;
+4. confirme o tempo da inferência;
+5. gere o vídeo.
+
+O Studio consulta a versão e os modelos instalados, preserva URL/modelo/timeout no navegador e mostra separadamente o planner solicitado e o planner efetivo.
+
+O modelo ainda seleciona apenas assets existentes. A validação e a aplicação espacial permanecem sob controle do motor local. O fallback determinístico continua ativado por padrão, mas pode ser desligado para avaliar falhas reais do modelo.
+
 ## API simplificada por prompt
 
 ```http
@@ -178,7 +201,11 @@ Content-Type: application/json
 ```json
 {
   "prompt": "A bird flies left above a cloud under the moon.",
-  "provider": "deterministic",
+  "provider": "ollama",
+  "ollama_model": "qwen3:4b",
+  "ollama_url": "http://localhost:11434",
+  "ollama_timeout": 60,
+  "fallback_to_deterministic": true,
   "preset": "draft",
   "generate_video": true
 }
@@ -199,6 +226,8 @@ Consulte `docs/PROMPT_STUDIO.md` para o contrato completo.
 ```text
 GET    /health
 GET    /v1/capabilities
+GET    /v1/ollama/status
+POST   /v1/ollama/test
 POST   /v1/generations
 POST   /v1/jobs
 GET    /v1/jobs
@@ -210,12 +239,13 @@ GET    /v1/jobs/{job_id}/artifacts
 GET    /v1/jobs/{job_id}/artifacts/{artifact_path}
 ```
 
-`GET /v1/capabilities` também informa:
+`GET /v1/capabilities` informa:
 
 - assets e aliases ativos;
 - relações espaciais suportadas;
 - disponibilidade de FFmpeg;
-- suporte a orientação automática e espelhamento legível.
+- suporte a orientação automática e espelhamento legível;
+- endpoints e suporte de fallback do Ollama.
 
 OpenAPI:
 
@@ -266,14 +296,6 @@ python -m examples.build_story_video_demo `
   --preset fast
 ```
 
-## Ollama local
-
-```powershell
-ollama pull qwen3:4b
-```
-
-No Studio, selecione `Ollama local`. O modelo seleciona apenas assets existentes; a validação e a aplicação espacial permanecem sob controle do motor local. O fallback determinístico continua ativado por padrão.
-
 ## Validação
 
 ```powershell
@@ -296,6 +318,7 @@ O CI executa a suíte no Windows com Python 3.12 e Python 3.14.
 
 ## Limites atuais
 
+- o Ollama ainda seleciona somente assets existentes;
 - cada história ainda gera duas cenas;
 - a transição real `sitting → walking` ainda está planejada;
 - a animação atual move grupos completos;
@@ -307,10 +330,10 @@ O CI executa a suíte no Windows com Python 3.12 e Python 3.14.
 
 ## Próximos marcos
 
-1. timeline com várias ações e cenas;
-2. transição persistente entre poses aprovadas;
-3. movimentos `idle`, `look_at`, `turn`, `walk` e `fly`;
-4. múltiplas instâncias do mesmo tipo de asset;
-5. personagens compostos por partes semânticas;
-6. fila de workers para geração concorrente;
-7. morphing individual de glyphs.
+1. storyboard Ollama com várias cenas, objetos, ações e durações;
+2. validação e reparo automático do plano;
+3. Asset Resolver para conceitos ausentes;
+4. animação interna das letras;
+5. timeline com várias ações e cenas;
+6. transição persistente entre poses aprovadas;
+7. fila de workers para geração concorrente.
