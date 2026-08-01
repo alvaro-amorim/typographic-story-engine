@@ -4,6 +4,13 @@ const state = {
   capabilities: null,
   currentJobId: null,
   pollTimer: null,
+  ollama: {
+    connected: false,
+    models: [],
+    version: null,
+    latencyMs: null,
+    loading: false,
+  },
 };
 
 const elements = {
@@ -16,6 +23,11 @@ const elements = {
   ollamaFields: document.querySelector("#ollama-fields"),
   ollamaModel: document.querySelector("#ollama-model"),
   ollamaUrl: document.querySelector("#ollama-url"),
+  ollamaTimeout: document.querySelector("#ollama-timeout"),
+  ollamaFallback: document.querySelector("#ollama-fallback"),
+  ollamaRefresh: document.querySelector("#ollama-refresh"),
+  ollamaTest: document.querySelector("#ollama-test"),
+  ollamaDetail: document.querySelector("#ollama-detail"),
   duration: document.querySelector("#duration"),
   fps: document.querySelector("#fps"),
   movement: document.querySelector("#movement"),
@@ -24,6 +36,7 @@ const elements = {
   apiStatus: document.querySelector("#api-status"),
   registryStatus: document.querySelector("#registry-status"),
   ffmpegStatus: document.querySelector("#ffmpeg-status"),
+  ollamaStatus: document.querySelector("#ollama-status"),
   emptyResult: document.querySelector("#empty-result"),
   activeResult: document.querySelector("#active-result"),
   resultTitle: document.querySelector("#result-title"),
@@ -76,9 +89,30 @@ function updatePromptCount() {
   localStorage.setItem("tse-studio-prompt", elements.prompt.value);
 }
 
+function selectedOllamaModel() {
+  return elements.ollamaModel.value.trim();
+}
+
+function updateGenerateAvailability() {
+  const registryReady = Boolean(state.capabilities?.default_registry_ready);
+  let plannerReady = true;
+  if (elements.provider.value === "ollama") {
+    plannerReady = Boolean(selectedOllamaModel());
+    if (!state.ollama.connected && !elements.ollamaFallback.checked) {
+      plannerReady = false;
+    }
+  }
+  elements.generateButton.disabled = !registryReady || !plannerReady;
+}
+
 function updateProviderFields() {
-  elements.ollamaFields.classList.toggle("hidden", elements.provider.value !== "ollama");
+  const usesOllama = elements.provider.value === "ollama";
+  elements.ollamaFields.classList.toggle("hidden", !usesOllama);
   localStorage.setItem("tse-studio-provider", elements.provider.value);
+  if (usesOllama && !state.ollama.loading && !state.ollama.models.length) {
+    loadOllamaStatus();
+  }
+  updateGenerateAvailability();
 }
 
 function updatePresetDescription() {
@@ -94,6 +128,9 @@ function restoreForm() {
   const prompt = localStorage.getItem("tse-studio-prompt");
   const provider = localStorage.getItem("tse-studio-provider");
   const preset = localStorage.getItem("tse-studio-preset");
+  const ollamaUrl = localStorage.getItem("tse-studio-ollama-url");
+  const ollamaTimeout = localStorage.getItem("tse-studio-ollama-timeout");
+  const ollamaFallback = localStorage.getItem("tse-studio-ollama-fallback");
   if (prompt) elements.prompt.value = prompt;
   if (provider && ["deterministic", "ollama"].includes(provider)) {
     elements.provider.value = provider;
@@ -101,8 +138,132 @@ function restoreForm() {
   if (preset && ["draft", "standard", "quality"].includes(preset)) {
     elements.preset.value = preset;
   }
+  if (ollamaUrl) elements.ollamaUrl.value = ollamaUrl;
+  if (ollamaTimeout) elements.ollamaTimeout.value = ollamaTimeout;
+  if (ollamaFallback !== null) elements.ollamaFallback.checked = ollamaFallback === "true";
   updatePromptCount();
   updateProviderFields();
+}
+
+function formatModelLabel(model) {
+  const details = [model.name];
+  if (model.parameter_size) details.push(model.parameter_size);
+  if (model.quantization_level) details.push(model.quantization_level);
+  return details.join(" · ");
+}
+
+function populateOllamaModels(models) {
+  const saved = localStorage.getItem("tse-studio-ollama-model");
+  const current = selectedOllamaModel();
+  const preferred = saved || current;
+  elements.ollamaModel.replaceChildren();
+
+  if (!models.length) {
+    const option = document.createElement("option");
+    option.value = preferred || "";
+    option.textContent = preferred
+      ? `${preferred} (salvo; não confirmado)`
+      : "Nenhum modelo instalado";
+    elements.ollamaModel.append(option);
+    updateGenerateAvailability();
+    return;
+  }
+
+  models.forEach((model) => {
+    const option = document.createElement("option");
+    option.value = model.name;
+    option.textContent = formatModelLabel(model);
+    elements.ollamaModel.append(option);
+  });
+  const names = models.map((model) => model.name);
+  if (preferred && names.includes(preferred)) {
+    elements.ollamaModel.value = preferred;
+  }
+  localStorage.setItem("tse-studio-ollama-model", elements.ollamaModel.value);
+  updateGenerateAvailability();
+}
+
+function ollamaDiscoveryTimeout() {
+  const configured = Number(elements.ollamaTimeout.value);
+  return Number.isFinite(configured) ? Math.max(0.5, Math.min(10, configured)) : 2;
+}
+
+async function loadOllamaStatus() {
+  if (state.ollama.loading) return;
+  state.ollama.loading = true;
+  setPill(elements.ollamaStatus, "Ollama verificando", "neutral");
+  elements.ollamaDetail.textContent = "Consultando versão e modelos instalados...";
+  elements.ollamaRefresh.disabled = true;
+  try {
+    const query = new URLSearchParams({
+      base_url: elements.ollamaUrl.value.trim(),
+      timeout_seconds: String(ollamaDiscoveryTimeout()),
+    });
+    const result = await requestJson(`/v1/ollama/status?${query}`);
+    state.ollama.connected = Boolean(result.connected);
+    state.ollama.models = Array.isArray(result.models) ? result.models : [];
+    state.ollama.version = result.version;
+    state.ollama.latencyMs = result.latency_ms;
+    populateOllamaModels(state.ollama.models);
+    if (result.connected) {
+      const count = state.ollama.models.length;
+      setPill(elements.ollamaStatus, `Ollama ${result.version} · ${count} modelo(s)`, count ? "ok" : "warn");
+      elements.ollamaDetail.textContent = count
+        ? `Conectado em ${result.latency_ms} ms. Selecione um modelo instalado ou execute o teste real.`
+        : `Conectado em ${result.latency_ms} ms, mas nenhum modelo está instalado.`;
+    } else {
+      setPill(elements.ollamaStatus, "Ollama indisponível", "warn");
+      elements.ollamaDetail.textContent = `${result.error}. O fallback determinístico pode continuar habilitado.`;
+    }
+  } catch (error) {
+    state.ollama.connected = false;
+    state.ollama.models = [];
+    populateOllamaModels([]);
+    setPill(elements.ollamaStatus, "Ollama indisponível", "warn");
+    elements.ollamaDetail.textContent = `${error.message}. O fallback determinístico pode continuar habilitado.`;
+  } finally {
+    state.ollama.loading = false;
+    elements.ollamaRefresh.disabled = false;
+    updateGenerateAvailability();
+  }
+}
+
+async function testOllamaSelection() {
+  const model = selectedOllamaModel();
+  if (!model) {
+    elements.ollamaDetail.textContent = "Instale ou selecione um modelo antes de testar.";
+    return;
+  }
+  elements.ollamaTest.disabled = true;
+  elements.ollamaTest.textContent = "Testando...";
+  elements.ollamaDetail.textContent = `Carregando ${model} e executando uma inferência mínima...`;
+  try {
+    const result = await requestJson("/v1/ollama/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        base_url: elements.ollamaUrl.value.trim(),
+        timeout_seconds: Number(elements.ollamaTimeout.value) || 60,
+      }),
+    });
+    state.ollama.connected = Boolean(result.connected);
+    if (result.connected) {
+      setPill(elements.ollamaStatus, `Ollama pronto · ${result.latency_ms} ms`, "ok");
+      elements.ollamaDetail.textContent = `Modelo ${result.model} respondeu em ${result.latency_ms} ms (servidor: ${result.server_duration_ms} ms).`;
+    } else {
+      setPill(elements.ollamaStatus, "Teste Ollama falhou", "error");
+      elements.ollamaDetail.textContent = result.error || "O modelo não respondeu.";
+    }
+  } catch (error) {
+    state.ollama.connected = false;
+    setPill(elements.ollamaStatus, "Teste Ollama falhou", "error");
+    elements.ollamaDetail.textContent = error.message;
+  } finally {
+    elements.ollamaTest.disabled = false;
+    elements.ollamaTest.textContent = "Testar modelo";
+    updateGenerateAvailability();
+  }
 }
 
 async function loadCapabilities() {
@@ -123,8 +284,9 @@ async function loadCapabilities() {
     if (!capabilities.ffmpeg_available) {
       elements.generateVideo.checked = false;
     }
-    elements.generateButton.disabled = !capabilities.default_registry_ready;
     updatePresetDescription();
+    updateGenerateAvailability();
+    await loadOllamaStatus();
   } catch (error) {
     setPill(elements.apiStatus, "API indisponível", "error");
     elements.generateButton.disabled = true;
@@ -158,8 +320,10 @@ async function submitGeneration(event) {
     prompt: elements.prompt.value,
     provider: elements.provider.value,
     preset: elements.preset.value,
-    ollama_model: elements.ollamaModel.value,
-    ollama_url: elements.ollamaUrl.value,
+    ollama_model: selectedOllamaModel(),
+    ollama_url: elements.ollamaUrl.value.trim(),
+    ollama_timeout: Number(elements.ollamaTimeout.value) || 60,
+    fallback_to_deterministic: elements.ollamaFallback.checked,
     duration_seconds: numberOrNull(elements.duration),
     fps: numberOrNull(elements.fps),
     movement_fraction: Number(elements.movement.value),
@@ -181,18 +345,19 @@ async function submitGeneration(event) {
   } catch (error) {
     showClientError(error.message);
   } finally {
-    elements.generateButton.disabled = !(state.capabilities?.default_registry_ready);
     elements.generateButton.textContent = "Gerar vídeo";
+    updateGenerateAvailability();
   }
 }
 
-function metadataCard(label, value) {
+function metadataCard(label, value, title = null) {
   const card = document.createElement("div");
   card.className = "metadata-card";
   const strong = document.createElement("strong");
   strong.textContent = label;
   const span = document.createElement("span");
   span.textContent = value ?? "—";
+  if (title) span.title = title;
   card.append(strong, span);
   return card;
 }
@@ -242,9 +407,17 @@ function renderJob(job) {
   elements.errorMessage.classList.toggle("hidden", !job.error);
   elements.errorMessage.textContent = job.error || "";
 
+  const requestedProvider = job.request.provider;
+  const effectiveProvider = job.planner_provider || requestedProvider;
+  const fallbackText = job.planner_fallback_used
+    ? "Sim — determinístico usado"
+    : "Não";
   elements.jobMetadata.replaceChildren(
     metadataCard("Job", job.id.slice(0, 10)),
-    metadataCard("Provider", job.planner_provider || job.request.provider),
+    metadataCard("Planner solicitado", requestedProvider),
+    metadataCard("Planner efetivo", effectiveProvider),
+    metadataCard("Modelo", requestedProvider === "ollama" ? job.request.ollama_model : "—"),
+    metadataCard("Fallback", fallbackText, job.planner_error),
     metadataCard("Frames", job.frame_count == null ? "—" : String(job.frame_count)),
     metadataCard("Duração", `${job.request.duration_seconds}s`),
   );
@@ -292,7 +465,9 @@ function historyItem(job) {
   prompt.textContent = job.request.story;
   const meta = document.createElement("p");
   meta.className = "history-meta";
-  meta.textContent = `${job.status} · ${Math.round(job.progress * 100)}% · ${new Date(job.created_at).toLocaleString("pt-BR")}`;
+  const provider = job.planner_provider || job.request.provider;
+  const fallback = job.planner_fallback_used ? " · fallback" : "";
+  meta.textContent = `${job.status} · ${provider}${fallback} · ${Math.round(job.progress * 100)}% · ${new Date(job.created_at).toLocaleString("pt-BR")}`;
   main.append(prompt, meta);
 
   const actions = document.createElement("div");
@@ -352,6 +527,14 @@ async function loadHistory() {
   }
 }
 
+function persistOllamaSettings() {
+  localStorage.setItem("tse-studio-ollama-url", elements.ollamaUrl.value.trim());
+  localStorage.setItem("tse-studio-ollama-timeout", elements.ollamaTimeout.value);
+  localStorage.setItem("tse-studio-ollama-fallback", String(elements.ollamaFallback.checked));
+  localStorage.setItem("tse-studio-ollama-model", selectedOllamaModel());
+  updateGenerateAvailability();
+}
+
 async function initialize() {
   restoreForm();
   await loadCapabilities();
@@ -365,5 +548,15 @@ elements.prompt.addEventListener("input", updatePromptCount);
 elements.provider.addEventListener("change", updateProviderFields);
 elements.preset.addEventListener("change", updatePresetDescription);
 elements.refreshHistory.addEventListener("click", loadHistory);
+elements.ollamaRefresh.addEventListener("click", loadOllamaStatus);
+elements.ollamaTest.addEventListener("click", testOllamaSelection);
+elements.ollamaModel.addEventListener("change", persistOllamaSettings);
+elements.ollamaFallback.addEventListener("change", persistOllamaSettings);
+elements.ollamaTimeout.addEventListener("change", persistOllamaSettings);
+elements.ollamaUrl.addEventListener("change", async () => {
+  persistOllamaSettings();
+  state.ollama.models = [];
+  await loadOllamaStatus();
+});
 
 initialize();

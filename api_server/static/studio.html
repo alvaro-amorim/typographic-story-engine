@@ -6,6 +6,7 @@
   <title>Typographic Story Studio</title>
   <link rel="stylesheet" href="/static/studio.css">
   <link rel="stylesheet" href="/static/asset-browser.css">
+  <link rel="stylesheet" href="/static/ollama-studio.css">
 </head>
 <body>
   <main class="shell">
@@ -25,6 +26,7 @@
       <span id="api-status" class="pill neutral">API verificando</span>
       <span id="registry-status" class="pill neutral">Assets verificando</span>
       <span id="ffmpeg-status" class="pill neutral">FFmpeg verificando</span>
+      <span id="ollama-status" class="pill neutral">Ollama verificando</span>
     </section>
 
     <div class="workspace">
@@ -60,20 +62,43 @@
                 <option value="deterministic">Determinístico</option>
                 <option value="ollama">Ollama local</option>
               </select>
-              <p class="field-note">A IA apenas seleciona assets aprovados.</p>
+              <p class="field-note">O Ollama interpreta o prompt, mas continua limitado aos assets aprovados nesta versão.</p>
             </div>
           </div>
 
-          <div id="ollama-fields" class="form-grid hidden">
-            <div>
-              <label for="ollama-model">Modelo Ollama</label>
-              <input id="ollama-model" name="ollama-model" value="qwen3:4b">
+          <section id="ollama-fields" class="ollama-card hidden" aria-label="Configuração do Ollama">
+            <div class="ollama-heading">
+              <div>
+                <strong>Ollama local</strong>
+                <p id="ollama-detail" class="field-note">Verificando conexão e modelos instalados...</p>
+              </div>
+              <div class="ollama-actions">
+                <button id="ollama-refresh" class="secondary-button" type="button">Atualizar modelos</button>
+                <button id="ollama-test" class="secondary-button" type="button">Testar modelo</button>
+              </div>
             </div>
-            <div>
-              <label for="ollama-url">URL Ollama</label>
-              <input id="ollama-url" name="ollama-url" value="http://localhost:11434">
+
+            <div class="form-grid ollama-grid">
+              <div>
+                <label for="ollama-model">Modelo instalado</label>
+                <select id="ollama-model" name="ollama-model">
+                  <option value="">Carregando modelos...</option>
+                </select>
+              </div>
+              <div>
+                <label for="ollama-url">URL Ollama</label>
+                <input id="ollama-url" name="ollama-url" value="http://localhost:11434">
+              </div>
+              <div>
+                <label for="ollama-timeout">Timeout em segundos</label>
+                <input id="ollama-timeout" name="ollama-timeout" type="number" min="1" max="600" step="1" value="60">
+              </div>
+              <div class="check-field compact-check">
+                <input id="ollama-fallback" name="ollama-fallback" type="checkbox" checked>
+                <label for="ollama-fallback">Usar planner determinístico se o Ollama falhar</label>
+              </div>
             </div>
-          </div>
+          </section>
 
           <details class="advanced">
             <summary>Configurações avançadas</summary>

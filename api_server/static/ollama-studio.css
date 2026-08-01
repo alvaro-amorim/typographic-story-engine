@@ -1,0 +1,59 @@
+.ollama-card {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(47, 93, 80, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(224, 236, 231, 0.72), rgba(255, 255, 255, 0.66));
+}
+
+.ollama-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ollama-heading strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #1f463b;
+}
+
+.ollama-heading p {
+  margin-bottom: 0;
+}
+
+.ollama-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ollama-actions .secondary-button {
+  white-space: nowrap;
+}
+
+.ollama-grid {
+  margin-top: 14px;
+}
+
+.compact-check {
+  align-items: flex-start;
+  padding-top: 29px;
+}
+
+.compact-check label {
+  line-height: 1.35;
+}
+
+@media (max-width: 640px) {
+  .ollama-heading {
+    display: block;
+  }
+
+  .ollama-actions {
+    justify-content: flex-start;
+    margin-top: 12px;
+  }
+}
