@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import argparse
 import importlib
-import json
 import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
+from api_server.ollama_service import OllamaServiceError, discover_ollama
 from api_server.studio_assets import DEFAULT_STUDIO_ROOT, ensure_default_registry, registry_is_ready
 from engine.silhouette_library import load_silhouette_catalog
 
@@ -23,6 +21,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ollama-url",
         default="http://localhost:11434",
+    )
+    parser.add_argument(
+        "--ollama-timeout",
+        type=float,
+        default=2.0,
+        help="Timeout used for Ollama version and model discovery.",
     )
     parser.add_argument(
         "--prepare-assets",
@@ -59,15 +63,17 @@ def _check_catalog() -> tuple[bool, str]:
     return True, f"{len(catalog.assets)} assets validados"
 
 
-def _check_ollama(base_url: str) -> tuple[bool, str]:
-    request = Request(base_url.rstrip("/") + "/api/tags", method="GET")
+def _check_ollama(base_url: str, timeout_seconds: float) -> tuple[bool, str]:
     try:
-        with urlopen(request, timeout=1.5) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (OSError, URLError, ValueError) as error:
+        status = discover_ollama(base_url, timeout_seconds=timeout_seconds)
+    except (OllamaServiceError, ValueError) as error:
         return False, f"indisponível ({error})"
-    models = [item.get("name", "") for item in payload.get("models", [])]
-    return True, f"ativo; {len(models)} modelo(s) local(is)"
+    names = [str(item["name"]) for item in status["models"]]
+    model_detail = ", ".join(names) if names else "nenhum modelo instalado"
+    return True, (
+        f"versão {status['version']}; {status['latency_ms']} ms; "
+        f"modelos: {model_detail}"
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -108,7 +114,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.prepare_assets:
         failures += int(not registry_ready)
 
-    ollama_ok, ollama_detail = _check_ollama(args.ollama_url)
+    ollama_ok, ollama_detail = _check_ollama(args.ollama_url, args.ollama_timeout)
     _status("Ollama (opcional)", ollama_ok, ollama_detail)
 
     if failures:
