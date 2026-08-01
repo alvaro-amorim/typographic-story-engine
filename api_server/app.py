@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Callable
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Response, status
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -15,8 +15,14 @@ from api_server.models import (
     ArtifactList,
     JobCreated,
     JobRecord,
+    OllamaModelTestRequest,
     PromptGenerationRequest,
     StoryJobCreate,
+)
+from api_server.ollama_service import (
+    OllamaServiceError,
+    discover_ollama,
+    test_ollama_model as run_ollama_model_test,
 )
 from api_server.presets import PRESETS, build_pipeline_request
 from engine.story_pipeline import (
@@ -31,6 +37,7 @@ PipelineRunner = Callable[
 ]
 
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
 
 
 def _resolve_executable(candidate: str | None, fallback: str) -> str | None:
@@ -87,10 +94,10 @@ def create_app(
 
     app = FastAPI(
         title="Typographic Story Engine API",
-        version="0.4.0",
+        version="0.5.0",
         description=(
-            "Local prompt-to-video studio with measured spatial composition and "
-            "direction-aware semantic characters."
+            "Local prompt-to-video studio with Ollama model discovery, measured "
+            "spatial composition and direction-aware semantic characters."
         ),
     )
     app.state.job_store = store
@@ -137,6 +144,7 @@ def create_app(
                 default_registry and default_registry.is_file()
             ),
             "ffmpeg_available": _resolve_executable(None, "ffmpeg") is not None,
+            "ollama_status_url": "/v1/ollama/status",
         }
 
     @app.get("/v1/capabilities")
@@ -169,7 +177,51 @@ def create_app(
             ],
             "direction_aware_characters": True,
             "readable_glyph_mirroring": True,
+            "ollama": {
+                "default_url": DEFAULT_OLLAMA_URL,
+                "status_endpoint": "/v1/ollama/status",
+                "test_endpoint": "/v1/ollama/test",
+                "model_discovery": True,
+                "fallback_supported": True,
+            },
         }
+
+    @app.get("/v1/ollama/status")
+    def ollama_status(
+        base_url: str = Query(default=DEFAULT_OLLAMA_URL),
+        timeout_seconds: float = Query(default=2.0, gt=0.0, le=30.0),
+    ) -> dict[str, object]:
+        try:
+            return discover_ollama(base_url, timeout_seconds=timeout_seconds)
+        except (OllamaServiceError, ValueError) as error:
+            return {
+                "connected": False,
+                "base_url": base_url.strip().rstrip("/"),
+                "version": None,
+                "latency_ms": None,
+                "models": [],
+                "error": str(error),
+            }
+
+    @app.post("/v1/ollama/test")
+    def ollama_model_test(payload: OllamaModelTestRequest) -> dict[str, object]:
+        try:
+            return run_ollama_model_test(
+                payload.model,
+                payload.base_url,
+                timeout_seconds=payload.timeout_seconds,
+            )
+        except (OllamaServiceError, ValueError) as error:
+            return {
+                "connected": False,
+                "base_url": payload.base_url,
+                "model": payload.model,
+                "latency_ms": None,
+                "server_duration_ms": None,
+                "response": "",
+                "done": False,
+                "error": str(error),
+            }
 
     @app.post(
         "/v1/generations",
